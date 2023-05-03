@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Marie Gilbertson" />
+
+<meta name="date" content="2023-05-03" />
+
+<title>Spatial statistics tutorial</title>
+
+<script src="site_libs/header-attrs-2.16/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<link href="site_libs/vembedr-0.1.5/css/vembedr.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Tutorials</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="Spatial_stats_tutorial.html">Spatial stats tutorial</a>
+</li>
+<li>
+  <a href="Movement_video_tutorial.html">Movement video tutorial</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Spatial statistics tutorial</h1>
+<h4 class="author">Marie Gilbertson</h4>
+<h4 class="date">2023-05-03</h4>
+
+</div>
+
+
+<div id="preamble" class="section level2">
+<h2>Preamble</h2>
+<p>What this tutorial does:</p>
+<ol style="list-style-type: decimal">
+<li>Demonstrates some common spatial statistical approaches - namely,
+tests for spatial autocorrelation, global clustering, and local
+clustering - with animal infectious disease data. Most of these tests
+will be done in R!</li>
+</ol>
+<p>What this tutorial does NOT do:</p>
+<ol style="list-style-type: decimal">
+<li>Tell you what to do with your data. Or really explain much about
+underlying theory. That’s all the purview of stats classes, textbooks,
+workshops, and the like. This is meant to be a purely technical
+reference. However, one good place to start if you’re just trying to
+pick a stastical test is this excellent overview from <a
+href="https://www.frontiersin.org/articles/10.3389/fvets.2020.00339/full">Kanankege
+et al.</a>.</li>
+</ol>
+<p>Now that we’ve got the disclaimers out of the way, let’s get
+started!</p>
+<p>First things first, let’s load the R packages we’ll need.</p>
+<pre class="r"><code>##### Clear Environment #####
+remove(list=ls())
+
+
+#### load libraries ####
+library(sf)
+library(terra)
+library(ggplot2)
+library(ape) # Moran&#39;s I
+library(ade4) # Mantel test
+library(smacpod) # for Cuzick and Edward&#39;s test
+library(spatstat) # to make ppp for C/E test
+library(ggforce)</code></pre>
+</div>
+<div id="simulate-data" class="section level2">
+<h2>Simulate data</h2>
+<p>For simplicity, we’re going to simulate some data. First, we’ll
+simulate individuals on a landscape. Our landscape will have two
+“habitat types” - a good one and a bad one. Our simulated individuals
+will be more likely to be found in our good habitat.</p>
+<pre class="r"><code>m &lt;- matrix(1, nrow = 100, ncol = 100)
+m[0:40, 0:50] &lt;- m[40:80, 0:100] &lt;- m[80:100, 50:100] &lt;- 2
+
+landscape &lt;- rast(m)
+
+plot(landscape)</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-1.png" width="672" /></p>
+<pre class="r"><code>poly &lt;- as.polygons(landscape, dissolve = T)
+plot(poly)</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-2.png" width="672" /></p>
+<pre class="r"><code>poly &lt;- st_as_sf(poly)
+plot(poly)</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-3.png" width="672" /></p>
+<pre class="r"><code>poly1 &lt;- poly$geometry[[1]]
+poly2 &lt;- poly$geometry[[2]]
+plot(poly1)</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-4.png" width="672" /></p>
+<pre class="r"><code>plot(poly2)</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-5.png" width="672" /></p>
+<p>Now we’ll simulate our population in our landscape, assuming we’ll
+have a higher probability of finding individuals in good habitat
+(habitat = 2) than bad habitat (habitat = 1).</p>
+<pre class="r"><code>set.seed(65187)
+inds1 &lt;- st_sample(poly1, size = 15)
+inds2 &lt;- st_sample(poly2, size = 85)
+
+inds1.coords &lt;- st_coordinates(inds1)
+inds2.coords &lt;- st_coordinates(inds2)
+inds.coords &lt;- data.frame(rbind(inds1.coords, inds2.coords))
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_sf(data = inds1) + 
+  geom_sf(data = inds2) +
+  scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
+  theme_bw()</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-population-1.png" width="672" /></p>
+<p>Now that we have our population, let’s simulate two scenarios: one
+where disease is clustered in the south-west corner of the landscape,
+and one where disease is randomly distributed across the landscape.</p>
+<pre class="r"><code>sw.inds &lt;- inds.coords[inds.coords$X&lt;50 &amp; inds.coords$Y&lt;50,]
+oth.inds &lt;- inds.coords[inds.coords$X&gt;=50 | inds.coords$Y&gt;=50,]
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = sw.inds, aes(x = X, y = Y)) +
+  scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
+  theme_bw()</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-1.png" width="672" /></p>
+<pre class="r"><code>sw.dz &lt;- sample(1:nrow(sw.inds), size = round(0.8*nrow(sw.inds), 0), replace = F)
+sw.dz # our infected individuals in the southwest corner</code></pre>
+<pre><code>##  [1]  1 11 18 15 22 24  9  4  2 21 13 14  7  3 10 16  5 26 20 25  6 12</code></pre>
+<pre class="r"><code>sw.inds$dz &lt;- 0
+sw.inds$dz[sw.dz] &lt;- 1
+sum(sw.inds$dz)</code></pre>
+<pre><code>## [1] 22</code></pre>
+<pre class="r"><code>oth.dz &lt;- sample(1:nrow(oth.inds), size = round(0.1*nrow(oth.inds), 0), replace = F)
+oth.dz</code></pre>
+<pre><code>## [1] 73  3 67 61 39 68 46</code></pre>
+<pre class="r"><code>oth.inds$dz &lt;- 0
+oth.inds$dz[oth.dz] &lt;- 1
+sum(oth.inds$dz)</code></pre>
+<pre><code>## [1] 7</code></pre>
+<pre class="r"><code>clust.dz &lt;- rbind(sw.inds, oth.inds)
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = clust.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
+  scale_color_manual(values = c(&quot;#000000&quot;, &quot;#cb181d&quot;), name = &quot;disease status&quot;) +
+  theme_bw()</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-2.png" width="672" /></p>
+<pre class="r"><code>all.dz &lt;- sample(1:nrow(inds.coords), size = sum(clust.dz$dz), replace = F)
+rand.dz &lt;- inds.coords
+rand.dz$dz &lt;- 0
+rand.dz$dz[all.dz] &lt;- 1
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = rand.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
+  scale_color_manual(values = c(&quot;#000000&quot;, &quot;#cb181d&quot;), name = &quot;disease status&quot;) +
+  theme_bw()</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-3.png" width="672" /></p>
+</div>
+<div id="spatial-autocorrelation" class="section level2">
+<h2>Spatial autocorrelation</h2>
+<p>Perhaps we should start by talking about what spatial autocorrelation
+is in the first place… Simply put, spatial autocorrelation means that
+things or individuals that are close together in space are more likely
+to be similar to each other than things or individuals more distant in
+space.</p>
+<p><img src="Video_files/SAC_Figure.jpg" /></p>
+<p>From an infectious disease perspective, this means we might expect
+individuals that are closer together to be more likely to have the same
+disease status (both have the disease or both are free from the
+disease), compared to individuals that are further apart from each
+other.</p>
+<p>Technically, what I’ve described is positive spatial autocorrelation.
+If the null hypothesis is that an attribute is distributed randomly
+across the landscape, positive spatial autocorrelation means similar
+attributes are more likely to be closer to each other (they appear
+clustered). Negative spatial autocorrelation means similar attributes
+are more likely to be distant or dispersed (imagine matching poles on a
+bunch of magnets, all trying to stay away from each other). In the
+infectious disease world, we’re generally interested in patterns of
+clustering, so from here on out, when I say “spatial autocorrelation,” I
+really just mean positive autocorrelation.</p>
+<p>There are lots of different tests for spatial autocorrelation, but
+we’re going to focus on just two: Moran’s I and the Mantel test.</p>
+<div id="morans-i" class="section level3">
+<h3>Moran’s I</h3>
+<p>For more info on calculating Moran’s I in R, you can also see this <a
+href="https://stats.oarc.ucla.edu/r/faq/how-can-i-calculate-morans-i-in-r/">tutorial</a>.</p>
+<p>We’ll calculate Moran’s I for both our clustered and our random
+disease scenarios. First, we’ll make an inverse distance matrix between
+our points. Since our individuals are the same in both scenarios, we’ll
+just make one matrix that works for both.</p>
+<pre class="r"><code>ind.dists &lt;- as.matrix(dist(cbind(clust.dz$X, clust.dz$Y)))
+ind.dists.inv &lt;- 1/ind.dists
+diag(ind.dists.inv) &lt;- 0
+ind.dists.inv[1:5, 1:5]</code></pre>
+<pre><code>##            1          2          3          4          5
+## 1 0.00000000 0.05025314 0.04906362 0.06265893 0.10437031
+## 2 0.05025314 0.00000000 0.02539472 0.19773471 0.09144795
+## 3 0.04906362 0.02539472 0.00000000 0.02772351 0.03346903
+## 4 0.06265893 0.19773471 0.02772351 0.00000000 0.15470510
+## 5 0.10437031 0.09144795 0.03346903 0.15470510 0.00000000</code></pre>
+<pre class="r"><code>Moran.I(clust.dz$dz, ind.dists.inv)</code></pre>
+<pre><code>## $observed
+## [1] 0.1369854
+## 
+## $expected
+## [1] -0.01010101
+## 
+## $sd
+## [1] 0.01751031
+## 
+## $p.value
+## [1] 0</code></pre>
+<pre class="r"><code>Moran.I(rand.dz$dz, ind.dists.inv)</code></pre>
+<pre><code>## $observed
+## [1] -0.01963193
+## 
+## $expected
+## [1] -0.01010101
+## 
+## $sd
+## [1] 0.01751031
+## 
+## $p.value
+## [1] 0.586233</code></pre>
+<p>For our clustered disease scenario, we see we have evidence for
+spatial autocorrelation, while our random scenario fails to reject the
+null hypothesis of zero spatial autocorrelation.</p>
+</div>
+<div id="mantel-test" class="section level3">
+<h3>Mantel test</h3>
+<p>For more info on performing Mantel tests in R, you can also see this
+<a
+href="https://stats.oarc.ucla.edu/r/faq/how-can-i-perform-a-mantel-test-in-r/">tutorial</a>.</p>
+<p>A quick caveat here: Mantel tests have a known limitation of
+potentially inflating Type I error (<a
+href="https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210x.12018">Guillot
+and Rousset, 2013</a>), so they should be used with caution. I have used
+them in a study of spatial autocorrelation in pathogen exposure among
+puma (<em>Puma concolor</em>; <a
+href="https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecs2.1558">Gilbertson
+et al 2016</a>), so it can be done…just be careful with
+interpretation.</p>
+<p>What we’re fundamentally doing with a Mantel test is comparing two
+different pairwise distance matrices: one representing the geographic
+distance between individuals, and one representing the attribute
+“distance” between individuals.</p>
+<pre class="r"><code>geo.dists &lt;- dist(cbind(rand.dz$X, rand.dz$Y))
+clust.dists &lt;- dist(clust.dz$dz)
+rand.dists &lt;- dist(rand.dz$dz)
+
+# Mantel test for our clustered disease scenario
+mantel.rtest(geo.dists, clust.dists, nrepet = 9999)</code></pre>
+<pre><code>## Warning in is.euclid(m2): Zero distance(s)</code></pre>
+<pre><code>## Monte-Carlo test
+## Call: mantel.rtest(m1 = geo.dists, m2 = clust.dists, nrepet = 9999)
+## 
+## Observation: 0.07283256 
+## 
+## Based on 9999 replicates
+## Simulated p-value: 0.0101 
+## Alternative hypothesis: greater 
+## 
+##      Std.Obs  Expectation     Variance 
+## 2.4950045145 0.0001786666 0.0008479595</code></pre>
+<pre class="r"><code># Mantel test for our random disease scenario
+mantel.rtest(geo.dists, rand.dists, nrepet = 9999)</code></pre>
+<pre><code>## Warning in is.euclid(m2): Zero distance(s)</code></pre>
+<pre><code>## Monte-Carlo test
+## Call: mantel.rtest(m1 = geo.dists, m2 = rand.dists, nrepet = 9999)
+## 
+## Observation: -0.0001344776 
+## 
+## Based on 9999 replicates
+## Simulated p-value: 0.479 
+## Alternative hypothesis: greater 
+## 
+##       Std.Obs   Expectation      Variance 
+## -0.0003113500 -0.0001253638  0.0008568343</code></pre>
+<p>As with Moran’s I, our Mantel tests show that we have evidence of
+spatial autocorrelation in our clustered disease scenario, but we fail
+to reject the null hypothesis for our random scenario. Hooray!</p>
+</div>
+</div>
+<div id="global-clustering" class="section level2">
+<h2>Global clustering</h2>
+<p>Next, we’re going to perform a test for global clustering. In this
+case, we’ll perform <a
+href="https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.2517-6161.1990.tb01773.x">Cuzick
+and Edwards test</a>, using the <em>smacpod</em> package. The function
+for doing so requires our data be in a “point patttern” dataset, so
+that’s our first step. We’ll also look across a range of nearest
+neighbors in our Cuzick and Edwards test.</p>
+<pre class="r"><code># the ppp() function requires a &quot;window of observation&quot;
+obs.window &lt;- owin(xrange=c(min(rand.dz$X), max(rand.dz$X)), yrange = c(min(rand.dz$Y), max(rand.dz$Y)))
+
+# create our point process object; since this includes disease status, we&#39;ll have separate pp objects for our two disease scenarios
+clust.pp &lt;- ppp(x = clust.dz$X, y = clust.dz$Y, window = obs.window, marks = as.factor(clust.dz$dz))
+rand.pp &lt;- ppp(x = rand.dz$X, y = rand.dz$Y, window = obs.window, marks = as.factor(rand.dz$dz))
+
+levels(clust.pp$marks) # our case state is in position 2, so we&#39;ll set case = 2 in the qnn.test funtion:</code></pre>
+<pre><code>## [1] &quot;0&quot; &quot;1&quot;</code></pre>
+<pre class="r"><code>qnn.test(clust.pp, q = c(1, 3, 5, 7, 9, 11), nsim = 999, case = 2, longlat = F)</code></pre>
+<pre><code>## 1 has been selected as the case group</code></pre>
+<pre><code>## Q nearest neighbors test
+## 
+## case label:  1 
+## control label:  0 
+## 
+## Summary of observed test statistics
+## 
+##   q  Tq pvalue
+##   1  17  0.003
+##   3  54  0.001
+##   5  85  0.001
+##   7 120  0.001
+##   9 153  0.001
+##  11 187  0.001
+## 
+## Summary of observed contrasts between test statistics
+## 
+##  contrast Tcontrast pvalue
+##   T3 - T1        37  0.001
+##   T5 - T1        68  0.001
+##   T7 - T1       103  0.001
+##   T9 - T1       136  0.001
+##  T11 - T1       170  0.001
+##   T5 - T3        31  0.002
+##   T7 - T3        66  0.001
+##   T9 - T3        99  0.001
+##  T11 - T3       133  0.001
+##   T7 - T5        35  0.001
+##   T9 - T5        68  0.001
+##  T11 - T5       102  0.001
+##   T9 - T7        33  0.001
+##  T11 - T7        67  0.001
+##  T11 - T9        34  0.001</code></pre>
+<pre class="r"><code>qnn.test(rand.pp, q = c(1, 3, 5, 7, 9, 11), nsim = 999, case = 2, longlat = F)</code></pre>
+<pre><code>## 1 has been selected as the case group</code></pre>
+<pre><code>## Q nearest neighbors test
+## 
+## case label:  1 
+## control label:  0 
+## 
+## Summary of observed test statistics
+## 
+##   q Tq pvalue
+##   1  5  0.904
+##   3 25  0.458
+##   5 39  0.608
+##   7 58  0.462
+##   9 69  0.712
+##  11 81  0.861
+## 
+## Summary of observed contrasts between test statistics
+## 
+##  contrast Tcontrast pvalue
+##   T3 - T1        20  0.206
+##   T5 - T1        34  0.432
+##   T7 - T1        53  0.312
+##   T9 - T1        64  0.577
+##  T11 - T1        76  0.761
+##   T5 - T3        14  0.777
+##   T7 - T3        33  0.506
+##   T9 - T3        44  0.803
+##  T11 - T3        56  0.897
+##   T7 - T5        19  0.269
+##   T9 - T5        30  0.719
+##  T11 - T5        42  0.875
+##   T9 - T7        11  0.955
+##  T11 - T7        23  0.976
+##  T11 - T9        12  0.916</code></pre>
+<p>Our Cuzick and Edwards test has identified global clustering of cases
+in our clustered disease scenario - and across a wide range of nearest
+neighbors, I might add - while there is no evidence of global clustering
+in our random disease scenario. Excellent!</p>
+</div>
+<div id="local-clustering" class="section level2">
+<h2>Local clustering</h2>
+<p>Lastly, we’re going to look for evidence of local clustering -
+especially instances where we can identify specific clusters of disease
+occurrence. To do this, we’re going to use a spatial scan statistic…and
+we’re going to venture away from R. That’s right, we’re going to use the
+software SaTScan. If you’ve never used SaTScan before, you can <a
+href="https://www.satscan.org/">download it for free</a>; I also
+strongly recommend checking out the <a
+href="https://www.satscan.org/cgi-bin/satscan/register.pl/SaTScan_Users_Guide.pdf?todo=process_userguide_download">user
+manual</a> as it is enormously helpful (don’t read the whole thing -
+just the bits that you need for your own analysis).</p>
+<p>Basically, SaTScan is going to pass a “scanning window” over our
+study area and look for windows in which we have an unexpected number of
+cases. This is a gross oversimplification of the process and SaTScan can
+do lots more complex analyses than what I’m showing here…but this is a
+good place to start.</p>
+<p>Now, the first important piece of business is deciding what
+statistical model we’ll be using. Since we have binomial (0/1) disease
+data, we can run a simple Bernoulli model:</p>
+<p><img src="Video_files/SaTScan_TOC.png" /> <em>Table of contents
+from the SaTScan user manual</em></p>
+<p><img src="Video_files/SaTScan_bern.png" /></p>
+<p>Rather than trying to read this sad screenshot, go check out that
+“user manual” link at the top of this section. The point here is that
+the user manual provides great info on your model choices
+<strong>and</strong> tells you what data you’ll need to provide the
+software.</p>
+<p>At a minimum, for our Bernoulli model, we need to provide SaTScan
+with three files: (1) a case file, (2) a control file, and (3) a
+coordinates file. We’ll generate those in R for best
+reproducibility.</p>
+<p>For both our case and control files, we need to make a .csv file with
+a location ID (we can use an animal ID) and the number of cases or
+controls per location ID (since our location IDs are individuals, we’ll
+just have one case/control per location). Here, our cases are our
+diseased individuals (dz = 1), and our controls are our disease free
+individuals (dz = 0). If we were doing a temporal analysis, we would
+also provide a date/time for each location ID. Because we have two
+disease scenarios, we’ll have a total of two case files and two control
+files.</p>
+<pre class="r"><code>clust.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(clust.dz)))
+clust.cases &lt;- clust.dz[clust.dz$dz==1,]
+clust.cases$no.cases &lt;- 1
+clust.cases &lt;- clust.cases[,c(&quot;id&quot;, &quot;no.cases&quot;)]
+
+
+rand.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(rand.dz)))
+rand.cases &lt;- rand.dz[rand.dz$dz==1,]
+rand.cases$no.cases &lt;- 1
+rand.cases &lt;- rand.cases[,c(&quot;id&quot;, &quot;no.cases&quot;)]
+
+
+
+clust.ctrls &lt;- clust.dz[clust.dz$dz==0,]
+clust.ctrls$no.ctrls &lt;- 1
+clust.ctrls &lt;- clust.ctrls[,c(&quot;id&quot;, &quot;no.ctrls&quot;)]
+
+
+rand.ctrls &lt;- rand.dz[rand.dz$dz==0,]
+rand.ctrls$no.ctrls &lt;- 1
+rand.ctrls &lt;- rand.ctrls[,c(&quot;id&quot;, &quot;no.ctrls&quot;)]
+
+
+
+head(clust.cases)</code></pre>
+<pre><code>##         id no.cases
+## X3   ind.1        1
+## X4   ind.2        1
+## X5   ind.3        1
+## X7   ind.4        1
+## X9   ind.5        1
+## X3.1 ind.6        1</code></pre>
+<pre class="r"><code>head(clust.ctrls)</code></pre>
+<pre><code>##          id no.ctrls
+## X7.1  ind.8        1
+## X42  ind.17        1
+## X51  ind.19        1
+## X71  ind.23        1
+## X82  ind.27        1
+## X1   ind.28        1</code></pre>
+<p>Next, we need to make our coordinates files. This file needs to have
+our coordinate locations (SaTScan can handle lat/long or cartesian
+coordinates), as well as location IDs.</p>
+<pre class="r"><code>clust.coords &lt;- clust.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
+head(clust.coords)</code></pre>
+<pre><code>##         id         X         Y
+## X3   ind.1 23.057387 15.355349
+## X4   ind.2 42.929933 14.324681
+## X5   ind.3  4.072883  7.938994
+## X7   ind.4 38.889596 17.366353
+## X9   ind.5 32.425685 17.364253
+## X3.1 ind.6 36.182093 21.698143</code></pre>
+<pre class="r"><code>rand.coords &lt;- rand.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
+head(rand.coords)</code></pre>
+<pre><code>##       id         X         Y
+## X1 ind.1 83.581292 63.598500
+## X2 ind.2 95.151688 75.667540
+## X3 ind.3 23.057387 15.355349
+## X4 ind.4 42.929933 14.324681
+## X5 ind.5  4.072883  7.938994
+## X6 ind.6 90.442909 66.696058</code></pre>
+<p>Lastly, we’ll write out each of these files as a .csv file, which we
+can then import into SaTScan.</p>
+<pre class="r"><code>write.csv(clust.cases, file = &quot;SaTScan_files/clust_cases.csv&quot;, row.names = F)
+write.csv(clust.ctrls, file = &quot;SaTScan_files/clust_ctrls.csv&quot;, row.names = F)
+write.csv(rand.cases, file = &quot;SaTScan_files/rand_cases.csv&quot;, row.names = F)
+write.csv(rand.ctrls, file = &quot;SaTScan_files/rand_ctrls.csv&quot;, row.names = F)
+write.csv(clust.coords, file = &quot;SaTScan_files/clust_coords.csv&quot;, row.names = F)
+write.csv(rand.coords, file = &quot;SaTScan_files/rand_coords.csv&quot;, row.names = F)</code></pre>
+<p>Here’s where we take things over the SaTScan!</p>
+<p>When you first open SaTScan, you’ll see a window like that pictured
+below. Click “Create New Session”</p>
+<p><img src="Video_files/SaTScan_start.png" /></p>
+<p>You’ll then see the main SaTScan window where you can input your
+data. We’ll start by loading our case data from our clustered disease
+scenario. To do so, click on the button with three dots next to the
+“Case File” window (see red arrow below):</p>
+<p><img src="Video_files/SaTScan_input.png" /></p>
+<p>After navigating to where we saved our clustered scenario case file,
+we then follow the prompts to tell SaTScan a little more about our file
+(e.g., what data is in each column, where to save the “.cas” file
+SaTScan needs):</p>
+<div class="vembedr">
+<div>
+<iframe src="https://www.youtube.com/embed/gH6OJRLZqhQ" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+</div>
+</div>
+<p>I didn’t make a video of it, but you’d repeat the same basic process
+for the controls file.</p>
+<p>Next, we can load our coordinates file, making sure we toggle if we
+are using Lat/Long or cartesian coordinates:</p>
+<div class="vembedr">
+<div>
+<iframe src="https://www.youtube.com/embed/2k9qNq5xrbU" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+</div>
+</div>
+<p>Once we have all our files loaded, we can make selections in the
+analysis tab. It’s also important to check out the options in the
+“advanced” box; in particular, it is best practice to re-run a SaTScan
+analysis with several different maximum spatial cluster sizes.</p>
+<div class="vembedr">
+<div>
+<iframe src="https://www.youtube.com/embed/8kXvz0BLUwY" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+</div>
+</div>
+<p>Before we proceed, we also need to make selections for where to save
+the output - and what output we want! Especially when you’re using real
+animal data, instead of our simulations, it can be handy to have SaTScan
+export a shapefile or KML file to quickly see where any identified
+clusters are located in real space. When selecting where to save your
+primary results file, use the three-dot button to open up the menu and
+pick a location and file name (see arrow below):</p>
+<p><img src="Video_files/SaTScan_output.png" /></p>
+<p>Finally, we can run our analysis! Simply click the big green play
+button at the top of the SaTScan window and view your results!</p>
+<div class="vembedr">
+<div>
+<iframe src="https://www.youtube.com/embed/H9gC1h58DR0" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+</div>
+</div>
+<p>Looking at the output text file from our clustered disease scenario,
+we can see that SaTScan identified two statistically significant
+clusters, and we have information about the location and size of these
+clusters.</p>
+<p><img src="Video_files/SaTScan_cluster_results.png" /></p>
+<p>In contrast, the SaTScan analysis of our random disease scenario did
+not find any statistically significant clusters:</p>
+<p><img src="Video_files/SaTScan_random_results.png" /></p>
+<p>We can go ahead and plot the clusters we identified with SaTScan for
+our clustered disease scenario.</p>
+<pre class="r"><code>ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = clust.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
+  scale_color_manual(values = c(&quot;#000000&quot;, &quot;#cb181d&quot;), name = &quot;disease status&quot;) +
+  geom_circle(aes(x0 = 4.07288, y0 = 7.93899, r = 36.07), linetype = &#39;dashed&#39;, fill = &quot;transparent&quot;, color = &quot;#cb181d&quot;) +
+  theme_bw()</code></pre>
+<p><img src="Spatial_stats_tutorial_files/figure-html/plot-satscan-clusters-1.png" width="672" /></p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
