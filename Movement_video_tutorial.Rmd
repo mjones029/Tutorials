@@ -110,7 +110,7 @@ writeGPX(lat = coord$y, lon = coord$x, time = secs, out_file = "test_trk_zoomin.
 ### Now we'll open this file in Google Earth Pro
 Open Google Earth Pro. To load data, click “File” --> “Open” and select the .gpx file we created in the last step. A pop-up box will appear; select “Create KML Tracks” and “Adjust altitudes to ground height” as shown below:
 
-![](../Video_files/load_data.png)
+![](./Video_files/load_data.png)
 
 \
 \
@@ -126,7 +126,7 @@ Your GPS data “track” should look like this once it’s loaded into Google E
 
 You can easily change the visual style of the track. To start, expand the “GPS device” data so you can see “Tracks” - see the area in the red square in the photo below.
 
-![](../Video_files/expand_track.png)
+![](./Video_files/expand_track.png)
 
 \
 \

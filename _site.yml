@@ -1,11 +1,9 @@
 name: "my-website"
 navbar:
-  title: "Test Website"
+  title: "Tutorials"
   left:
     - text: "Home"
       href: index.html
-    - text: "About"
-      href: About.html
     - text: "Movement video tutorial"
       href: Movement_video_tutorial.html
       
