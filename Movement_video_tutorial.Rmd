@@ -117,7 +117,7 @@ Open Google Earth Pro. To load data, click “File” --> “Open” and select 
 
 Your GPS data “track” should look like this once it’s loaded into Google Earth Pro:
 
-![](../Video_files/successful_load.png)
+![](./Video_files/successful_load.png)
 \
 \
 \
