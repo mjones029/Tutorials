@@ -1,8 +1,10 @@
 name: "my-website"
 navbar:
-  title: "My Website"
+  title: "Test Website"
   left:
     - text: "Home"
       href: index.html
     - text: "About"
       href: About.html
+      
+output_dir: "docs"
