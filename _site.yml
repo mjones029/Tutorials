@@ -7,6 +7,6 @@ navbar:
     - text: "About"
       href: About.html
     - text: "Movement video tutorial"
-      href: Movement_video_tutorial.Rmd
+      href: Movement_video_tutorial.html
       
 output_dir: "docs"
