@@ -1,0 +1,162 @@
+---
+title: "Hidden Markov Modeling Tutorial"
+author: "Marie Gilbertson"
+date: "2023-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+   
+   
+### Preamble
+What this tutorial does:
+
+1. Demonstrates a simple example of fitting hidden Markov models (HMM) to animal movement data. 
+
+
+What this tutorial does NOT do:
+
+1. Teach you the underlying theory for HMMs, explore the vast range of uses of HMMs, or teach how to troubleshoot inital parameter selection. For that kind of information, may I suggest checking out the very thorough [guide to using the R package momentuHMM](https://cran.r-project.org/web/packages/momentuHMM/vignettes/momentuHMM.pdf). This tutorial is meant as a technical and very simple introduction to fitting HMMs with momentuHMM. 
+
+
+Now that we've got the disclaimers out of the way, let's get started!  
+
+First things first, let's load the R packages we'll need.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+##### Clear Environment #####
+remove(list=ls())
+
+
+#### load libraries ####
+library(momentuHMM)
+library(ggplot2)
+library(adehabitatHR)
+library(lubridate)
+```
+  
+
+### Simulate data
+To make it possible for anyone to replicate this workflow, we're going to simulate some animal movement data.  
+
+We are going to be working through an example of using HMMs to identify different "behavioral states" for an animal, based on their movement data. That means that our simulated individual needs to have mutliple behavioral states. To keep things simple, we'll simulate a **resident state** characterized by short steps, meandering turning angles, and attraction to a central home range. Our other behavioral state with be a **traveling state** where our animal takes longer steps with restriced turning angles (we'll have them generally move sort of straight ahead).  
+
+To do these simulations, we can just use a simple biased correlated random walk (BCRW) movement model, but we will need a few functions to make that happen. The R functions we'll use for this originally come from this lovely paper from [Long et al 2014](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2656.12198).  
+
+
+*Note: if you're not comfortable with how we write functions in R, don't sweat it. One of these days I'll make a little tutorial about writing functions. In the meantime, just trust me that this works and that you don't need this to analyze your own real data.*
+
+```{r simulate-data-functions}
+
+## first we have a function for simulating a biased correlated random walk
+BCRW_sim <- function(
+    n=100,          #number of movement steps
+    h=0.25,         #step length parameter
+    rho=0,          #bias correlation parameter (0-1, where 0 -> unbiased, uncorrelated random walk, and 1 -> biased, deterministic movement)
+    b=1,            #bias strength parameter
+    c=0,            #bias distance decay parameter
+    y0=c(0,0),       #animal starting location
+    ya=c(0,0)        #animal attraction location
+){
+  
+  #---- Main Function ------
+  y <- y0
+  y.t <- y
+  theta.y <- runif(1,-pi,pi)       #first direction is random
+  
+  
+  for (i in 1:n){
+    
+    delta <- sqrt(sum((ya-y)^2))                              #distance to attraction point 
+    psi <- atan2(ya[2]-y[2],ya[1]-y[1])                       #angle toward attraction point
+    beta <- tanh(b*delta^c)                                   #bias effect     
+    mu <- w.circ.mean(c(theta.y,psi),c(1-beta,beta))          #biased direction
+    theta.y <- rwrpnorm(1,mu,rho)                             #"draw" actual turning angle based on "expected" angle, constrained by bias correlation parameter
+    #step length from chi-squared distribution
+    d.y <- h*rchi(1)
+    y. <- y + c(d.y*cos(theta.y),d.y*sin(theta.y))            #calculate this "step"
+    
+    
+    #Build the trajectory
+    y.t <- rbind(y.t,y.)        
+    #Save for next step!
+    y <- y.
+  }
+  
+  y.out <- data.frame(y.t,row.names=NULL)
+  colnames(y.out) <- c("x","y")
+  
+  #add date/time to trajectory; considers date/time to be on a per-minute basis
+  date <- seq(1, 60*(n+1), 60)
+  y.out$date <- as_datetime(date)
+  return(y.out)
+}
+
+#Weighted circular mean calculation (for the bias direction)
+w.circ.mean <- function (x,w) 
+{
+  sinr <- sum(w*sin(x)) 
+  cosr <- sum(w*cos(x)) 
+  circmean <- atan2(sinr, cosr) 
+  circmean 
+}
+
+
+```
+   
+   
+For our resident state, we'll have our animal's movements be biased towards its first location when it started in this movement state; this will cause them to stick around that general location. For our traveling state, we'll set the bias to some distant point so they head off in some other direction. We'll otherwise use the step length and bias parameters to create our two behavioral states. We'll also have our animal switch back and forth between the states a few times.  
+
+```{r simulate-data}
+set.seed(32794)
+
+## Create a vector of time stamps to represent the time stamps for simulated animal locations
+# we'll simulate 60 days of movement data, with locations taken every 4 hours (but this is an arbitrary choice)
+times <- seq(Sys.time(), Sys.time()+(60*24*60*60), by = (4*60*60))
+
+
+
+#### Simulate Dispersal ####
+## We'll simulate dispersal in two "phases"
+## Phase 1: resident around point (0,0)
+## Phase 2: traveling toward point (50, 50)
+## Phase 3: resident around new range
+## Phase 4: traveling toward point (150, 100)
+## Phase 5: resident around new range
+
+
+# set duration (in number of locations/fixes) for phase 1
+phase1.n <- 100
+# simulate and view phase 1 movement
+p1 <- BCRW_sim(n = phase1.n, h = 1, rho = 0.8, y0 = c(0,0), ya = c(0,0))
+ggplot(p1, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+# take the final location from phase 1 to use as the starting location for phase 2
+end1 <- tail(p1[,c("x", "y")],1)
+# simulate and view phase 2 movement
+phase2.n <- 40
+p2 <- BCRW_sim(n = phase2.n, h = 5, rho = 0.85, y0 = c(end1$x, end1$y), ya = c(500, 500))
+ggplot(p2, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+
+
+
+
+
+
+# remove last step of phase 1 trajectory so no duplicated locations when both phases are combined
+disp1 <- disp1[-c(nrow(disp1)),] 
+# combine phases and view
+disp <- rbind(disp1, disp2)
+ggplot(disp, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+# add time stamps and an identifier for this individual
+disp$date <- times
+
+
+```
