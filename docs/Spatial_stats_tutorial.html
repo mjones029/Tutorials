@@ -322,36 +322,35 @@ library(ggforce)</code></pre>
 simulate individuals on a landscape. Our landscape will have two
 “habitat types” - a good one and a bad one. Our simulated individuals
 will be more likely to be found in our good habitat.</p>
-<pre class="r"><code>m &lt;- matrix(1, nrow = 100, ncol = 100)
+<pre class="r"><code>## 100x100 landscape with low and high quality habitat (habitat = 1 or 2, respectively)
+m &lt;- matrix(1, nrow = 100, ncol = 100)
 m[0:40, 0:50] &lt;- m[40:80, 0:100] &lt;- m[80:100, 50:100] &lt;- 2
 
-landscape &lt;- rast(m)
+landscape &lt;- rast(m) # convert our matrix to a raster
 
 plot(landscape)</code></pre>
 <p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-1.png" width="672" /></p>
-<pre class="r"><code>poly &lt;- as.polygons(landscape, dissolve = T)
-plot(poly)</code></pre>
-<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-2.png" width="672" /></p>
-<pre class="r"><code>poly &lt;- st_as_sf(poly)
-plot(poly)</code></pre>
-<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-3.png" width="672" /></p>
-<pre class="r"><code>poly1 &lt;- poly$geometry[[1]]
-poly2 &lt;- poly$geometry[[2]]
-plot(poly1)</code></pre>
-<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-4.png" width="672" /></p>
-<pre class="r"><code>plot(poly2)</code></pre>
-<p><img src="Spatial_stats_tutorial_files/figure-html/simulate-landscape-5.png" width="672" /></p>
+<pre class="r"><code>## for sampling points within our two landscape types, we&#39;ll extract separate high and low quality habitat patches as polygons
+poly &lt;- as.polygons(landscape, dissolve = T) 
+poly &lt;- st_as_sf(poly)
+
+poly1 &lt;- poly$geometry[[1]]
+poly2 &lt;- poly$geometry[[2]]</code></pre>
 <p>Now we’ll simulate our population in our landscape, assuming we’ll
 have a higher probability of finding individuals in good habitat
 (habitat = 2) than bad habitat (habitat = 1).</p>
-<pre class="r"><code>set.seed(65187)
+<pre class="r"><code>set.seed(65187) # set seed for reproducibility
+
+## sample from the two habitat polygons we made in previous step
 inds1 &lt;- st_sample(poly1, size = 15)
 inds2 &lt;- st_sample(poly2, size = 85)
 
+## extract coordinates for our sample points and combine into a single dataframe
 inds1.coords &lt;- st_coordinates(inds1)
 inds2.coords &lt;- st_coordinates(inds2)
 inds.coords &lt;- data.frame(rbind(inds1.coords, inds2.coords))
 
+## plot it!
 ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
   geom_sf(data = inds1) + 
   geom_sf(data = inds2) +
@@ -361,37 +360,42 @@ ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
 <p>Now that we have our population, let’s simulate two scenarios: one
 where disease is clustered in the south-west corner of the landscape,
 and one where disease is randomly distributed across the landscape.</p>
-<pre class="r"><code>sw.inds &lt;- inds.coords[inds.coords$X&lt;50 &amp; inds.coords$Y&lt;50,]
+<pre class="r"><code>## Take the subset of individuals in the &quot;southwest&quot; and the subset of &quot;everyone else&quot;
+sw.inds &lt;- inds.coords[inds.coords$X&lt;50 &amp; inds.coords$Y&lt;50,]
 oth.inds &lt;- inds.coords[inds.coords$X&gt;=50 | inds.coords$Y&gt;=50,]
 
+## plot our southwest individuals to see that it worked
 ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
   geom_point(data = sw.inds, aes(x = X, y = Y)) +
   scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
   theme_bw()</code></pre>
 <p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-1.png" width="672" /></p>
-<pre class="r"><code>sw.dz &lt;- sample(1:nrow(sw.inds), size = round(0.8*nrow(sw.inds), 0), replace = F)
+<pre class="r"><code>## now take a random sample of 80% of our southwest individuals to have our infectious disease
+sw.dz &lt;- sample(1:nrow(sw.inds), size = round(0.8*nrow(sw.inds), 0), replace = F)
 sw.dz # our infected individuals in the southwest corner</code></pre>
 <pre><code>##  [1]  1 11 18 15 22 24  9  4  2 21 13 14  7  3 10 16  5 26 20 25  6 12</code></pre>
 <pre class="r"><code>sw.inds$dz &lt;- 0
 sw.inds$dz[sw.dz] &lt;- 1
-sum(sw.inds$dz)</code></pre>
-<pre><code>## [1] 22</code></pre>
-<pre class="r"><code>oth.dz &lt;- sample(1:nrow(oth.inds), size = round(0.1*nrow(oth.inds), 0), replace = F)
+
+## And for &quot;everyone else,&quot; let&#39;s randomly select 10% of our individuals to have the disease
+oth.dz &lt;- sample(1:nrow(oth.inds), size = round(0.1*nrow(oth.inds), 0), replace = F)
 oth.dz</code></pre>
 <pre><code>## [1] 73  3 67 61 39 68 46</code></pre>
 <pre class="r"><code>oth.inds$dz &lt;- 0
 oth.inds$dz[oth.dz] &lt;- 1
-sum(oth.inds$dz)</code></pre>
-<pre><code>## [1] 7</code></pre>
-<pre class="r"><code>clust.dz &lt;- rbind(sw.inds, oth.inds)
+
+## let&#39;s put everyone back together again and plot it, with our infected individuals showing up as red points
+clust.dz &lt;- rbind(sw.inds, oth.inds)
 
 ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
   geom_point(data = clust.dz, aes(x = X, y = Y, color = as.factor(dz))) +
   scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
   scale_color_manual(values = c(&quot;#000000&quot;, &quot;#cb181d&quot;), name = &quot;disease status&quot;) +
+  ggtitle(&quot;Clustered disease scenario&quot;) +
   theme_bw()</code></pre>
 <p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-2.png" width="672" /></p>
-<pre class="r"><code>all.dz &lt;- sample(1:nrow(inds.coords), size = sum(clust.dz$dz), replace = F)
+<pre class="r"><code>## for our random disease scenario, let&#39;s get the same number of infections, but have them randomly distributed across the landscape
+all.dz &lt;- sample(1:nrow(inds.coords), size = sum(clust.dz$dz), replace = F)
 rand.dz &lt;- inds.coords
 rand.dz$dz &lt;- 0
 rand.dz$dz[all.dz] &lt;- 1
@@ -400,6 +404,7 @@ ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
   geom_point(data = rand.dz, aes(x = X, y = Y, color = as.factor(dz))) +
   scale_fill_manual(values = c(&quot;#f7fcb9&quot;, &quot;#41ab5d&quot;), name = &quot;habitat quality&quot;) +
   scale_color_manual(values = c(&quot;#000000&quot;, &quot;#cb181d&quot;), name = &quot;disease status&quot;) +
+  ggtitle(&quot;Random disease scenario&quot;) +
   theme_bw()</code></pre>
 <p><img src="Spatial_stats_tutorial_files/figure-html/simulate-disease-3.png" width="672" /></p>
 </div>
@@ -436,9 +441,9 @@ href="https://stats.oarc.ucla.edu/r/faq/how-can-i-calculate-morans-i-in-r/">tuto
 disease scenarios. First, we’ll make an inverse distance matrix between
 our points. Since our individuals are the same in both scenarios, we’ll
 just make one matrix that works for both.</p>
-<pre class="r"><code>ind.dists &lt;- as.matrix(dist(cbind(clust.dz$X, clust.dz$Y)))
-ind.dists.inv &lt;- 1/ind.dists
-diag(ind.dists.inv) &lt;- 0
+<pre class="r"><code>ind.dists &lt;- as.matrix(dist(cbind(clust.dz$X, clust.dz$Y))) # distance matrix
+ind.dists.inv &lt;- 1/ind.dists # take the inverse
+diag(ind.dists.inv) &lt;- 0 # make the diagonals = 0
 ind.dists.inv[1:5, 1:5]</code></pre>
 <pre><code>##            1          2          3          4          5
 ## 1 0.00000000 0.05025314 0.04906362 0.06265893 0.10437031
@@ -492,9 +497,9 @@ interpretation.</p>
 different pairwise distance matrices: one representing the geographic
 distance between individuals, and one representing the attribute
 “distance” between individuals.</p>
-<pre class="r"><code>geo.dists &lt;- dist(cbind(rand.dz$X, rand.dz$Y))
-clust.dists &lt;- dist(clust.dz$dz)
-rand.dists &lt;- dist(rand.dz$dz)
+<pre class="r"><code>geo.dists &lt;- dist(cbind(rand.dz$X, rand.dz$Y)) # geographic distance matrix
+clust.dists &lt;- dist(clust.dz$dz) # attribute distance matrix (clustered disease scenario)
+rand.dists &lt;- dist(rand.dz$dz) # attribute distance matrix (random disease scenario)
 
 # Mantel test for our clustered disease scenario
 mantel.rtest(geo.dists, clust.dists, nrepet = 9999)</code></pre>
@@ -617,10 +622,11 @@ levels(clust.pp$marks) # our case state is in position 2, so we&#39;ll set case 
 ##   T9 - T7        11  0.955
 ##  T11 - T7        23  0.976
 ##  T11 - T9        12  0.916</code></pre>
-<p>Our Cuzick and Edwards test has identified global clustering of cases
-in our clustered disease scenario - and across a wide range of nearest
-neighbors, I might add - while there is no evidence of global clustering
-in our random disease scenario. Excellent!</p>
+<p>We’re focusing on the “Summary of observed test statistics” in our
+results. There, we can see that our Cuzick and Edwards test has
+identified global clustering of cases in our clustered disease scenario
+across a wide range of nearest neighbors, while there is no evidence of
+global clustering in our random disease scenario. Excellent!</p>
 </div>
 <div id="local-clustering" class="section level2">
 <h2>Local clustering</h2>
@@ -641,14 +647,17 @@ do lots more complex analyses than what I’m showing here…but this is a
 good place to start.</p>
 <p>Now, the first important piece of business is deciding what
 statistical model we’ll be using. Since we have binomial (0/1) disease
-data, we can run a simple Bernoulli model:</p>
+data, we can run a simple Bernoulli model. We can check out the SaTScan
+user manual to read up on the model:</p>
 <p><img src="Video_files/SaTScan_TOC.png" /></p>
+<p><em>Screenshot of the SaTScan Table of Contents</em></p>
+<p><strong>Check out the screenshot from the user manual about the
+Bernoulli Model:</strong></p>
 <p><img src="Video_files/SaTScan_bern.png" /></p>
-<p>Rather than trying to read this sad screenshot, go check out that
-“user manual” link at the top of this section. The point here is that
-the user manual provides great info on your model choices
-<strong>and</strong> tells you what data you’ll need to provide the
-software.</p>
+<p>Again: go check out that “user manual” link at the top of this
+section. The point here is that the user manual provides great info on
+your model choices <strong>and</strong> tells you what data you’ll need
+to provide the software.</p>
 <p>At a minimum, for our Bernoulli model, we need to provide SaTScan
 with three files: (1) a case file, (2) a control file, and (3) a
 coordinates file. We’ll generate those in R for best
@@ -662,20 +671,20 @@ individuals (dz = 0). If we were doing a temporal analysis, we would
 also provide a date/time for each location ID. Because we have two
 disease scenarios, we’ll have a total of two case files and two control
 files.</p>
-<pre class="r"><code>clust.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(clust.dz)))
-clust.cases &lt;- clust.dz[clust.dz$dz==1,]
+<pre class="r"><code>clust.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(clust.dz))) # let&#39;s give them individual IDs
+clust.cases &lt;- clust.dz[clust.dz$dz==1,] # take just the cases
 clust.cases$no.cases &lt;- 1
 clust.cases &lt;- clust.cases[,c(&quot;id&quot;, &quot;no.cases&quot;)]
 
 
-rand.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(rand.dz)))
-rand.cases &lt;- rand.dz[rand.dz$dz==1,]
+rand.dz$id &lt;- paste0(&quot;ind.&quot;, seq(1, nrow(rand.dz))) # we need to give our random scenario individuals IDs as well
+rand.cases &lt;- rand.dz[rand.dz$dz==1,] # take just the cases
 rand.cases$no.cases &lt;- 1
 rand.cases &lt;- rand.cases[,c(&quot;id&quot;, &quot;no.cases&quot;)]
 
 
 
-clust.ctrls &lt;- clust.dz[clust.dz$dz==0,]
+clust.ctrls &lt;- clust.dz[clust.dz$dz==0,] # now just the controls
 clust.ctrls$no.ctrls &lt;- 1
 clust.ctrls &lt;- clust.ctrls[,c(&quot;id&quot;, &quot;no.ctrls&quot;)]
 
@@ -685,7 +694,7 @@ rand.ctrls$no.ctrls &lt;- 1
 rand.ctrls &lt;- rand.ctrls[,c(&quot;id&quot;, &quot;no.ctrls&quot;)]
 
 
-
+# check out how the case file is structured
 head(clust.cases)</code></pre>
 <pre><code>##         id no.cases
 ## X3   ind.1        1
@@ -694,7 +703,8 @@ head(clust.cases)</code></pre>
 ## X7   ind.4        1
 ## X9   ind.5        1
 ## X3.1 ind.6        1</code></pre>
-<pre class="r"><code>head(clust.ctrls)</code></pre>
+<pre class="r"><code># and we can compare that structure to the control file
+head(clust.ctrls)</code></pre>
 <pre><code>##          id no.ctrls
 ## X7.1  ind.8        1
 ## X42  ind.17        1
@@ -705,7 +715,11 @@ head(clust.cases)</code></pre>
 <p>Next, we need to make our coordinates files. This file needs to have
 our coordinate locations (SaTScan can handle lat/long or cartesian
 coordinates), as well as location IDs.</p>
-<pre class="r"><code>clust.coords &lt;- clust.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
+<pre class="r"><code># clustered disease scenario coordinates
+clust.coords &lt;- clust.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
+rand.coords &lt;- rand.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
+
+# check out how the coordinates file is structured
 head(clust.coords)</code></pre>
 <pre><code>##         id         X         Y
 ## X3   ind.1 23.057387 15.355349
@@ -714,15 +728,6 @@ head(clust.coords)</code></pre>
 ## X7   ind.4 38.889596 17.366353
 ## X9   ind.5 32.425685 17.364253
 ## X3.1 ind.6 36.182093 21.698143</code></pre>
-<pre class="r"><code>rand.coords &lt;- rand.dz[,c(&quot;id&quot;, &quot;X&quot;, &quot;Y&quot;)]
-head(rand.coords)</code></pre>
-<pre><code>##       id         X         Y
-## X1 ind.1 83.581292 63.598500
-## X2 ind.2 95.151688 75.667540
-## X3 ind.3 23.057387 15.355349
-## X4 ind.4 42.929933 14.324681
-## X5 ind.5  4.072883  7.938994
-## X6 ind.6 90.442909 66.696058</code></pre>
 <p>Lastly, we’ll write out each of these files as a .csv file, which we
 can then import into SaTScan.</p>
 <pre class="r"><code>write.csv(clust.cases, file = &quot;SaTScan_files/clust_cases.csv&quot;, row.names = F)
@@ -752,10 +757,10 @@ SaTScan needs):</p>
 <p>I didn’t make a video of it, but you’d repeat the same basic process
 for the controls file.</p>
 <p>Next, we can load our coordinates file, making sure we toggle if we
-are using Lat/Long or cartesian coordinates:</p>
+are using Lat/Long or Cartesian coordinates:</p>
 <div class="vembedr">
 <div>
-<iframe src="https://www.youtube.com/embed/2k9qNq5xrbU" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+<iframe src="https://www.youtube.com/embed/lLwDeMIyVnM" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
 </div>
 </div>
 <p>Once we have all our files loaded, we can make selections in the
@@ -779,17 +784,17 @@ pick a location and file name (see arrow below):</p>
 button at the top of the SaTScan window and view your results!</p>
 <div class="vembedr">
 <div>
-<iframe src="https://www.youtube.com/embed/H9gC1h58DR0" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
+<iframe src="https://www.youtube.com/embed/IT-0VX-1PlY" width="533" height="300" frameborder="0" allowfullscreen="" data-external="1"></iframe>
 </div>
 </div>
 <p>Looking at the output text file from our clustered disease scenario,
-we can see that SaTScan identified two statistically significant
-clusters, and we have information about the location and size of these
-clusters.</p>
+we can see that SaTScan identified one statistically significant
+cluster, and we have information about the location and size of this
+cluster.</p>
 <p><img src="Video_files/SaTScan_cluster_results.png" /></p>
 <p>In contrast, the SaTScan analysis of our random disease scenario did
 not find any statistically significant clusters:</p>
-<p><img src="Video_files/SaTScan_random_results.png" /></p>
+<p><img src="Video_files/SaTScan_rand_results.png" /></p>
 <p>We can go ahead and plot the clusters we identified with SaTScan for
 our clustered disease scenario.</p>
 <pre class="r"><code>ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
@@ -799,6 +804,47 @@ our clustered disease scenario.</p>
   geom_circle(aes(x0 = 4.07288, y0 = 7.93899, r = 36.07), linetype = &#39;dashed&#39;, fill = &quot;transparent&quot;, color = &quot;#cb181d&quot;) +
   theme_bw()</code></pre>
 <p><img src="Spatial_stats_tutorial_files/figure-html/plot-satscan-clusters-1.png" width="672" /></p>
+<p>We’ve successfully identified a local cluster! You’ll notice how our
+circle goes way off our simulated landscape, which is an important
+reminder that SaTScan includes these external areas in its scanning. If
+this were real data, I’d probably play around with the SaTScan settings
+a bit to see if there are some overlapping clusters that perhaps stick
+closer to the study area.</p>
+<div id="well-thats-all-for-now" class="section level4">
+<h4>Well, that’s all for now!</h4>
+<p>Thanks for checking out the tutorial, and I hope it was remotely
+useful!</p>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>## R version 4.2.0 (2022-04-22)
+## Platform: x86_64-apple-darwin17.0 (64-bit)
+## Running under: macOS Big Sur 11.7.6
+## 
+## Matrix products: default
+## LAPACK: /Library/Frameworks/R.framework/Versions/4.2/Resources/lib/libRlapack.dylib
+## 
+## locale:
+## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] ggforce_0.4.1         spatstat_2.3-4        spatstat.linnet_2.3-2 spatstat.core_2.4-4   rpart_4.1.16          nlme_3.1-157          spatstat.random_3.1-3 spatstat.geom_3.0-5   spatstat.data_3.0-0  
+## [10] smacpod_2.5           ape_5.6-2             terra_1.6-41          vembedr_0.1.5         moveVis_0.10.5        move_4.1.8            geosphere_1.5-14      raster_3.6-11         ggplot2_3.4.0        
+## [19] sf_1.0-9              adehabitatLT_0.3.25   CircStats_0.2-6       boot_1.3-28           MASS_7.3-56           adehabitatMA_0.3.14   ade4_1.7-19           rgeos_0.5-9           rgdal_1.6-2          
+## [28] sp_1.6-0              rmarkdown_2.16       
+## 
+## loaded via a namespace (and not attached):
+##  [1] spatstat.sparse_3.0-0 lubridate_1.9.2       httr_1.4.4            tools_4.2.0           bslib_0.4.1           utf8_1.2.2            R6_2.5.1              KernSmooth_2.23-20    mgcv_1.8-40          
+## [10] DBI_1.1.3             colorspace_2.0-3      withr_2.5.0           tidyselect_1.2.0      curl_4.3.3            compiler_4.2.0        cli_3.6.0             av_0.8.3              xml2_1.3.3           
+## [19] labeling_0.4.2        sass_0.4.4            scales_1.2.1          classInt_0.4-8        pbapply_1.6-0         proxy_0.4-27          goftest_1.2-3         stringr_1.5.0         digest_0.6.30        
+## [28] spatstat.utils_3.0-1  pkgconfig_2.0.3       htmltools_0.5.3       plotrix_3.8-2         fastmap_1.1.0         highr_0.9             rlang_1.0.6           rstudioapi_0.14       smerc_1.7.2          
+## [37] jquerylib_0.1.4       farver_2.1.1          generics_0.1.3        jsonlite_1.8.3        dplyr_1.0.10          magrittr_2.0.3        Matrix_1.4-1          Rcpp_1.0.10           munsell_0.5.0        
+## [46] fansi_1.0.3           abind_1.4-5           lifecycle_1.0.3       stringi_1.7.12        yaml_2.3.6            grid_4.2.0            parallel_4.2.0        deldir_1.0-6          lattice_0.20-45      
+## [55] splines_4.2.0         cowplot_1.1.1         tensor_1.5            magick_2.7.4          knitr_1.39            pillar_1.8.1          codetools_0.2-18      glue_1.6.2            evaluate_0.15        
+## [64] gifski_1.6.6-1        tweenr_2.0.2          vctrs_0.5.2           gtable_0.3.1          polyclip_1.10-0       slippymath_0.3.1      assertthat_0.2.1      cachem_1.0.6          xfun_0.35            
+## [73] lwgeom_0.2-10         e1071_1.7-12          class_7.3-20          tibble_3.1.8          memoise_2.0.1         units_0.8-0           timechange_0.2.0</code></pre>
+</div>
 </div>
 
 

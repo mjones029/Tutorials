@@ -1,0 +1,393 @@
+---
+title: "Spatial statistics tutorial"
+author: "Marie Gilbertson"
+date: "2023-05-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+  
+  
+## Preamble
+
+What this tutorial does:
+
+1. Demonstrates some common spatial statistical approaches - namely, tests for spatial autocorrelation, global clustering, and local clustering - with animal infectious disease data. Most of these tests will be done in R!
+
+
+What this tutorial does NOT do:
+
+1. Tell you what to do with your data. Or really explain much about underlying theory. That's all the purview of stats classes, textbooks, workshops, and the like. This is meant to be a purely technical reference. However, one good place to start if you're just trying to pick a stastical test is this excellent overview from [Kanankege et al.](https://www.frontiersin.org/articles/10.3389/fvets.2020.00339/full).
+
+
+Now that we've got the disclaimers out of the way, let's get started!  
+
+First things first, let's load the R packages we'll need.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+##### Clear Environment #####
+remove(list=ls())
+
+
+#### load libraries ####
+library(sf)
+library(terra)
+library(ggplot2)
+library(ape) # Moran's I
+library(ade4) # Mantel test
+library(smacpod) # for Cuzick and Edward's test
+library(spatstat) # to make ppp for C/E test
+library(ggforce)
+```
+
+  
+  
+## Simulate data
+
+For simplicity, we're going to simulate some data. First, we'll simulate individuals on a landscape. Our landscape will have two "habitat types" - a good one and a bad one. Our simulated individuals will be more likely to be found in our good habitat. 
+
+```{r simulate-landscape}
+## 100x100 landscape with low and high quality habitat (habitat = 1 or 2, respectively)
+m <- matrix(1, nrow = 100, ncol = 100)
+m[0:40, 0:50] <- m[40:80, 0:100] <- m[80:100, 50:100] <- 2
+
+landscape <- rast(m) # convert our matrix to a raster
+
+plot(landscape)
+
+## for sampling points within our two landscape types, we'll extract separate high and low quality habitat patches as polygons
+poly <- as.polygons(landscape, dissolve = T) 
+poly <- st_as_sf(poly)
+
+poly1 <- poly$geometry[[1]]
+poly2 <- poly$geometry[[2]]
+```
+
+  
+  
+Now we'll simulate our population in our landscape, assuming we'll have a higher probability of finding individuals in good habitat (habitat = 2) than bad habitat (habitat = 1).
+
+```{r simulate-population}
+set.seed(65187) # set seed for reproducibility
+
+## sample from the two habitat polygons we made in previous step
+inds1 <- st_sample(poly1, size = 15)
+inds2 <- st_sample(poly2, size = 85)
+
+## extract coordinates for our sample points and combine into a single dataframe
+inds1.coords <- st_coordinates(inds1)
+inds2.coords <- st_coordinates(inds2)
+inds.coords <- data.frame(rbind(inds1.coords, inds2.coords))
+
+## plot it!
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_sf(data = inds1) + 
+  geom_sf(data = inds2) +
+  scale_fill_manual(values = c("#f7fcb9", "#41ab5d"), name = "habitat quality") +
+  theme_bw()
+```
+  
+  
+Now that we have our population, let's simulate two scenarios: one where disease is clustered in the south-west corner of the landscape, and one where disease is randomly distributed across the landscape. 
+```{r simulate-disease}
+
+## Take the subset of individuals in the "southwest" and the subset of "everyone else"
+sw.inds <- inds.coords[inds.coords$X<50 & inds.coords$Y<50,]
+oth.inds <- inds.coords[inds.coords$X>=50 | inds.coords$Y>=50,]
+
+## plot our southwest individuals to see that it worked
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = sw.inds, aes(x = X, y = Y)) +
+  scale_fill_manual(values = c("#f7fcb9", "#41ab5d"), name = "habitat quality") +
+  theme_bw()
+
+## now take a random sample of 80% of our southwest individuals to have our infectious disease
+sw.dz <- sample(1:nrow(sw.inds), size = round(0.8*nrow(sw.inds), 0), replace = F)
+sw.dz # our infected individuals in the southwest corner
+sw.inds$dz <- 0
+sw.inds$dz[sw.dz] <- 1
+
+## And for "everyone else," let's randomly select 10% of our individuals to have the disease
+oth.dz <- sample(1:nrow(oth.inds), size = round(0.1*nrow(oth.inds), 0), replace = F)
+oth.dz
+oth.inds$dz <- 0
+oth.inds$dz[oth.dz] <- 1
+
+## let's put everyone back together again and plot it, with our infected individuals showing up as red points
+clust.dz <- rbind(sw.inds, oth.inds)
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = clust.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c("#f7fcb9", "#41ab5d"), name = "habitat quality") +
+  scale_color_manual(values = c("#000000", "#cb181d"), name = "disease status") +
+  ggtitle("Clustered disease scenario") +
+  theme_bw()
+
+
+
+## for our random disease scenario, let's get the same number of infections, but have them randomly distributed across the landscape
+all.dz <- sample(1:nrow(inds.coords), size = sum(clust.dz$dz), replace = F)
+rand.dz <- inds.coords
+rand.dz$dz <- 0
+rand.dz$dz[all.dz] <- 1
+
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = rand.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c("#f7fcb9", "#41ab5d"), name = "habitat quality") +
+  scale_color_manual(values = c("#000000", "#cb181d"), name = "disease status") +
+  ggtitle("Random disease scenario") +
+  theme_bw()
+```
+
+
+## Spatial autocorrelation
+
+Perhaps we should start by talking about what spatial autocorrelation is in the first place... Simply put, spatial autocorrelation means that things or individuals that are close together in space are more likely to be similar to each other than things or individuals more distant in space.
+
+![](./Video_files/SAC_figure.jpg)
+  
+  
+From an infectious disease perspective, this means we might expect individuals that are closer together to be more likely to have the same disease status (both have the disease or both are free from the disease), compared to individuals that are further apart from each other.  
+
+Technically, what I've described is positive spatial autocorrelation. If the null hypothesis is that an attribute is distributed randomly across the landscape, positive spatial autocorrelation means similar attributes are more likely to be closer to each other (they appear clustered). Negative spatial autocorrelation means similar attributes are more likely to be distant or dispersed (imagine matching poles on a bunch of magnets, all trying to stay away from each other). In the infectious disease world, we're generally interested in patterns of clustering, so from here on out, when I say "spatial autocorrelation," I really just mean positive autocorrelation. 
+
+There are lots of different tests for spatial autocorrelation, but we're going to focus on just two: Moran's I and the Mantel test.  
+  
+  
+### Moran's I
+
+For more info on calculating Moran's I in R, you can also see this [tutorial](https://stats.oarc.ucla.edu/r/faq/how-can-i-calculate-morans-i-in-r/).  
+
+We'll calculate Moran's I for both our clustered and our random disease scenarios. First, we'll make an inverse distance matrix between our points. Since our individuals are the same in both scenarios, we'll just make one matrix that works for both.
+
+```{r moran-inv-dist-mat}
+ind.dists <- as.matrix(dist(cbind(clust.dz$X, clust.dz$Y))) # distance matrix
+ind.dists.inv <- 1/ind.dists # take the inverse
+diag(ind.dists.inv) <- 0 # make the diagonals = 0
+ind.dists.inv[1:5, 1:5]
+
+Moran.I(clust.dz$dz, ind.dists.inv)
+Moran.I(rand.dz$dz, ind.dists.inv)
+```
+
+For our clustered disease scenario, we see we have evidence for spatial autocorrelation, while our random scenario fails to reject the null hypothesis of zero spatial autocorrelation.  
+  
+  
+### Mantel test
+
+For more info on performing Mantel tests in R, you can also see this [tutorial](https://stats.oarc.ucla.edu/r/faq/how-can-i-perform-a-mantel-test-in-r/).  
+
+A quick caveat here: Mantel tests have a known limitation of potentially inflating Type I error ([Guillot and Rousset, 2013](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/2041-210x.12018)), so they should be used with caution. I have used them in a study of spatial autocorrelation in pathogen exposure among puma (*Puma concolor*; [Gilbertson et al 2016](https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecs2.1558)), so it can be done...just be careful with interpretation.  
+
+What we're fundamentally doing with a Mantel test is comparing two different pairwise distance matrices: one representing the geographic distance between individuals, and one representing the attribute "distance" between individuals.
+
+```{r Mantel-dist-mats}
+geo.dists <- dist(cbind(rand.dz$X, rand.dz$Y)) # geographic distance matrix
+clust.dists <- dist(clust.dz$dz) # attribute distance matrix (clustered disease scenario)
+rand.dists <- dist(rand.dz$dz) # attribute distance matrix (random disease scenario)
+
+# Mantel test for our clustered disease scenario
+mantel.rtest(geo.dists, clust.dists, nrepet = 9999)
+
+# Mantel test for our random disease scenario
+mantel.rtest(geo.dists, rand.dists, nrepet = 9999)
+
+```
+
+As with Moran's I, our Mantel tests show that we have evidence of spatial autocorrelation in our clustered disease scenario, but we fail to reject the null hypothesis for our random scenario. Hooray!  
+  
+  
+## Global clustering
+
+Next, we're going to perform a test for global clustering. In this case, we'll perform [Cuzick and Edwards test](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.2517-6161.1990.tb01773.x), using the *smacpod* package. The function for doing so requires our data be in a "point patttern" dataset, so that's our first step. We'll also look across a range of nearest neighbors in our Cuzick and Edwards test. 
+
+```{r cuz-eds-test}
+# the ppp() function requires a "window of observation"
+obs.window <- owin(xrange=c(min(rand.dz$X), max(rand.dz$X)), yrange = c(min(rand.dz$Y), max(rand.dz$Y)))
+
+# create our point process object; since this includes disease status, we'll have separate pp objects for our two disease scenarios
+clust.pp <- ppp(x = clust.dz$X, y = clust.dz$Y, window = obs.window, marks = as.factor(clust.dz$dz))
+rand.pp <- ppp(x = rand.dz$X, y = rand.dz$Y, window = obs.window, marks = as.factor(rand.dz$dz))
+
+levels(clust.pp$marks) # our case state is in position 2, so we'll set case = 2 in the qnn.test funtion:
+qnn.test(clust.pp, q = c(1, 3, 5, 7, 9, 11), nsim = 999, case = 2, longlat = F)
+qnn.test(rand.pp, q = c(1, 3, 5, 7, 9, 11), nsim = 999, case = 2, longlat = F)
+
+```
+  
+  
+We're focusing on the "Summary of observed test statistics" in our results. There, we can see that our Cuzick and Edwards test has identified global clustering of cases in our clustered disease scenario across a wide range of nearest neighbors, while there is no evidence of global clustering in our random disease scenario. Excellent!  
+  
+  
+## Local clustering
+
+Lastly, we're going to look for evidence of local clustering - especially instances where we can identify specific clusters of disease occurrence. To do this, we're going to use a spatial scan statistic...and we're going to venture away from R. That's right, we're going to use the software SaTScan. If you've never used SaTScan before, you can [download it for free](https://www.satscan.org/); I also strongly recommend checking out the [user manual](https://www.satscan.org/cgi-bin/satscan/register.pl/SaTScan_Users_Guide.pdf?todo=process_userguide_download) as it is enormously helpful (don't read the whole thing - just the bits that you need for your own analysis).
+
+Basically, SaTScan is going to pass a "scanning window" over our study area and look for windows in which we have an unexpected number of cases. This is a gross oversimplification of the process and SaTScan can do lots more complex analyses than what I'm showing here...but this is a good place to start.  
+
+Now, the first important piece of business is deciding what statistical model we'll be using. Since we have binomial (0/1) disease data, we can run a simple Bernoulli model. We can check out the SaTScan user manual to read up on the model:
+
+![](./Video_files/SaTScan_TOC.png)
+  
+*Screenshot of the SaTScan Table of Contents*
+  
+  
+  **Check out the screenshot from the user manual about the Bernoulli Model:**  
+    
+    
+![](./Video_files/SaTScan_bern.png)
+  
+  
+Again: go check out that "user manual" link at the top of this section. The point here is that the user manual provides great info on your model choices **and** tells you what data you'll need to provide the software.  
+
+At a minimum, for our Bernoulli model, we need to provide SaTScan with three files: (1) a case file, (2) a control file, and (3) a coordinates file. We'll generate those in R for best reproducibility.  
+
+For both our case and control files, we need to make a .csv file with a location ID (we can use an animal ID) and the number of cases or controls per location ID (since our location IDs are individuals, we'll just have one case/control per location). Here, our cases are our diseased individuals (dz = 1), and our controls are our disease free individuals (dz = 0). If we were doing a temporal analysis, we would also provide a date/time for each location ID. Because we have two disease scenarios, we'll have a total of two case files and two control files.
+
+```{r satscan-case-control-files}
+clust.dz$id <- paste0("ind.", seq(1, nrow(clust.dz))) # let's give them individual IDs
+clust.cases <- clust.dz[clust.dz$dz==1,] # take just the cases
+clust.cases$no.cases <- 1
+clust.cases <- clust.cases[,c("id", "no.cases")]
+
+
+rand.dz$id <- paste0("ind.", seq(1, nrow(rand.dz))) # we need to give our random scenario individuals IDs as well
+rand.cases <- rand.dz[rand.dz$dz==1,] # take just the cases
+rand.cases$no.cases <- 1
+rand.cases <- rand.cases[,c("id", "no.cases")]
+
+
+
+clust.ctrls <- clust.dz[clust.dz$dz==0,] # now just the controls
+clust.ctrls$no.ctrls <- 1
+clust.ctrls <- clust.ctrls[,c("id", "no.ctrls")]
+
+
+rand.ctrls <- rand.dz[rand.dz$dz==0,]
+rand.ctrls$no.ctrls <- 1
+rand.ctrls <- rand.ctrls[,c("id", "no.ctrls")]
+
+
+# check out how the case file is structured
+head(clust.cases)
+# and we can compare that structure to the control file
+head(clust.ctrls)
+
+```
+
+Next, we need to make our coordinates files. This file needs to have our coordinate locations (SaTScan can handle lat/long or cartesian coordinates), as well as location IDs. 
+
+```{r satscan-coords-file}
+# clustered disease scenario coordinates
+clust.coords <- clust.dz[,c("id", "X", "Y")]
+rand.coords <- rand.dz[,c("id", "X", "Y")]
+
+# check out how the coordinates file is structured
+head(clust.coords)
+
+```
+  
+  
+Lastly, we'll write out each of these files as a .csv file, which we can then import into SaTScan.
+```{r satscan-write-files, eval = FALSE}
+write.csv(clust.cases, file = "SaTScan_files/clust_cases.csv", row.names = F)
+write.csv(clust.ctrls, file = "SaTScan_files/clust_ctrls.csv", row.names = F)
+write.csv(rand.cases, file = "SaTScan_files/rand_cases.csv", row.names = F)
+write.csv(rand.ctrls, file = "SaTScan_files/rand_ctrls.csv", row.names = F)
+write.csv(clust.coords, file = "SaTScan_files/clust_coords.csv", row.names = F)
+write.csv(rand.coords, file = "SaTScan_files/rand_coords.csv", row.names = F)
+```
+  
+  
+Here's where we take things over the SaTScan!  
+  
+  
+When you first open SaTScan, you'll see a window like that pictured below. Click "Create New Session"
+
+![](./Video_files/SaTScan_start.png)
+  
+    
+    
+You'll then see the main SaTScan window where you can input your data. We'll start by loading our case data from our clustered disease scenario. To do so, click on the button with three dots next to the "Case File" window (see red arrow below):
+
+![](./Video_files/SaTScan_input.png)
+  
+    
+    
+After navigating to where we saved our clustered scenario case file, we then follow the prompts to tell SaTScan a little more about our file (e.g., what data is in each column, where to save the ".cas" file SaTScan needs):
+
+```{r satscan-cases-video, echo=FALSE}
+embed_url("https://youtu.be/gH6OJRLZqhQ")
+```
+  
+  
+I didn't make a video of it, but you'd repeat the same basic process for the controls file.  
+  
+    
+    
+Next, we can load our coordinates file, making sure we toggle if we are using Lat/Long or Cartesian coordinates:
+```{r satscan-coords-video, echo=FALSE}
+embed_url("https://youtu.be/lLwDeMIyVnM")
+```
+
+  
+  
+Once we have all our files loaded, we can make selections in the analysis tab. It's also important to check out the options in the "advanced" box; in particular, it is best practice to re-run a SaTScan analysis with several different maximum spatial cluster sizes. 
+```{r satscan-analysis-video, echo=FALSE}
+embed_url("https://youtu.be/8kXvz0BLUwY")
+```
+  
+  
+Before we proceed, we also need to make selections for where to save the output - and what output we want! Especially when you're using real animal data, instead of our simulations, it can be handy to have SaTScan export a shapefile or KML file to quickly see where any identified clusters are located in real space. When selecting where to save your primary results file, use the three-dot button to open up the menu and pick a location and file name (see arrow below):
+
+![](./Video_files/SaTScan_output.png)
+
+  
+  
+Finally, we can run our analysis! Simply click the big green play button at the top of the SaTScan window and view your results!
+```{r satscan-run-video, echo=FALSE}
+embed_url("https://youtu.be/IT-0VX-1PlY")
+```
+
+  
+  
+Looking at the output text file from our clustered disease scenario, we can see that SaTScan identified one statistically significant cluster, and we have information about the location and size of this cluster.  
+
+
+![](./Video_files/SaTScan_cluster_results.png)
+
+  
+    
+    
+In contrast, the SaTScan analysis of our random disease scenario did not find any statistically significant clusters:  
+
+
+![](./Video_files/SaTScan_rand_results.png)
+
+  
+  
+We can go ahead and plot the clusters we identified with SaTScan for our clustered disease scenario.
+```{r plot-satscan-clusters}
+ggplot() + geom_sf(data = poly, aes(fill = as.factor(lyr.1))) +
+  geom_point(data = clust.dz, aes(x = X, y = Y, color = as.factor(dz))) +
+  scale_fill_manual(values = c("#f7fcb9", "#41ab5d"), name = "habitat quality") +
+  scale_color_manual(values = c("#000000", "#cb181d"), name = "disease status") +
+  geom_circle(aes(x0 = 4.07288, y0 = 7.93899, r = 36.07), linetype = 'dashed', fill = "transparent", color = "#cb181d") +
+  theme_bw()
+
+```
+  
+  
+We've successfully identified a local cluster! You'll notice how our circle goes way off our simulated landscape, which is an important reminder that SaTScan includes these external areas in its scanning. If this were real data, I'd probably play around with the SaTScan settings a bit to see if there are some overlapping clusters that perhaps stick closer to the study area.  
+  
+  
+#### Well, that's all for now!
+Thanks for checking out the tutorial, and I hope it was remotely useful!  
+  
+    
+```{r session-info}
+sessionInfo()
+```
+
