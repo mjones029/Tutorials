@@ -112,10 +112,6 @@ For our resident state, we'll have our animal's movements be biased towards its 
 ```{r simulate-data}
 set.seed(32794)
 
-## Create a vector of time stamps to represent the time stamps for simulated animal locations
-# we'll simulate 60 days of movement data, with locations taken every 4 hours (but this is an arbitrary choice)
-times <- seq(Sys.time(), Sys.time()+(60*24*60*60), by = (4*60*60))
-
 
 
 #### Simulate Dispersal ####
@@ -130,33 +126,184 @@ times <- seq(Sys.time(), Sys.time()+(60*24*60*60), by = (4*60*60))
 # set duration (in number of locations/fixes) for phase 1
 phase1.n <- 100
 # simulate and view phase 1 movement
-p1 <- BCRW_sim(n = phase1.n, h = 1, rho = 0.8, y0 = c(0,0), ya = c(0,0))
+p1 <- BCRW_sim(n = phase1.n, h = 2, rho = 0.8, y0 = c(0,0), ya = c(0,0))
 ggplot(p1, aes(x = x, y = y)) + geom_path() + 
   coord_fixed() + theme_bw()
 
 # take the final location from phase 1 to use as the starting location for phase 2
 end1 <- tail(p1[,c("x", "y")],1)
 # simulate and view phase 2 movement
-phase2.n <- 40
+phase2.n <- 30
 p2 <- BCRW_sim(n = phase2.n, h = 5, rho = 0.85, y0 = c(end1$x, end1$y), ya = c(500, 500))
 ggplot(p2, aes(x = x, y = y)) + geom_path() + 
   coord_fixed() + theme_bw()
 
-
-
-
-
-
-
-# remove last step of phase 1 trajectory so no duplicated locations when both phases are combined
-disp1 <- disp1[-c(nrow(disp1)),] 
-# combine phases and view
-disp <- rbind(disp1, disp2)
-ggplot(disp, aes(x = x, y = y)) + geom_path() + 
+end2 <- tail(p2[,c("x", "y")],1)
+# simulate and view phase 3 movement
+phase3.n <- 100
+p3 <- BCRW_sim(n = phase3.n, h = 2, rho = 0.8, y0 = c(end2$x, end2$y), ya = c(end2$x, end2$y))
+ggplot(p3, aes(x = x, y = y)) + geom_path() + 
   coord_fixed() + theme_bw()
 
-# add time stamps and an identifier for this individual
-disp$date <- times
+
+# take the final location from phase 3 to use as the starting location for phase 4
+end3 <- tail(p3[,c("x", "y")],1)
+# simulate and view phase 2 movement
+phase4.n <- 30
+p4 <- BCRW_sim(n = phase4.n, h = 5, rho = 0.85, y0 = c(end3$x, end3$y), ya = c(1000, 0))
+ggplot(p4, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+
+end4 <- tail(p4[,c("x", "y")],1)
+# simulate and view phase 3 movement
+phase5.n <- 100
+p5 <- BCRW_sim(n = phase5.n, h = 2, rho = 0.8, y0 = c(end4$x, end4$y), ya = c(end4$x, end4$y))
+ggplot(p5, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+
+
+# remove last step of each phase trajectory so no duplicated locations when all phases are combined...except sometimes GPS collars accidentally transmit the same location twice (which can be a problem in HMMs), so let's leave a couple duplicate locations for use to "clean up" later. 
+p1 <- p1[-c(nrow(p1)),] 
+p3 <- p3[-c(nrow(p3)),] 
+
+
+
+# combine phases and view
+p <- rbind(p1, p2, p3, p4, p5)
+ggplot(p, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()
+
+# add time stamps; we'll say that we have locations every 4 hours
+p$date <- seq(as.POSIXct("2017-04-01 04:00:00"), by = (4*60*60), length.out = nrow(p))
+
+
+```
+
+
+To be more like real telemetry data, let's add some noise to our time stamps. GPS collars really never collect a location at perfect intervals, and this can impact our HMM, so let's allow all our time stamps to randomly vary by up to 10 minutes before or after the "scheduled," every-4-hours time.
+```{r fix-rate-noise}
+p$real.time <- p$date + sample(c((-10*60):(10*60)), size = nrow(p), replace = T)
+head(p)
+```
+
+In reality, we'd also be missing some locations because, for example, the collar would fail to transmit the animal's location. These missing locations can impact our HMM, so let's also randomly drop 2% of our locations. 
+```{r drop-locs}
+drop <- sample(1:nrow(p), size = 0.02*nrow(p), replace = F)
+pd <- p[-c(drop),]
+
+ggplot(p, aes(x = x, y = y, color = real.time)) + geom_path() + 
+  coord_fixed() + theme_bw() + ggtitle("Simulated 'messy' data")
+```
+
+Now we have a nice simulated dataset with a little added "messiness" to replicate what you might experience with real animal movement data. Naturally, that means it's time to "clean up" our data!  
+
+### Prepare animal movement data
+
+What's the point in making our data "messy" if we're just going to go and clean it up, you ask? Well, if you're working with real data, it's going to messy and it does no one any good to pretend otherwise. 
+
+To begin with, let's explore our data a little bit, pretending that we didn't just simulate this ourselves. We can start by making our animal movement data an "ltraj" object so we can use some of the functions in the very handy *adehabitatLT* package. 
+
+```{r make-ltraj}
+
+traj <- as.ltraj(xy = pd[,c("x", "y")], date = pd$real.time, id = "ind.1")
+traj
+```
+
+We can see that we now have an "ltraj" object containing the movement data for "ind.1." There are 353 relocations, but since we haven't added any "NAs" to our data, our object supposedly doesn't have missing data (but you and I know that's not true). We can also see the start and end dates for our data. Lastly, we can also see that we have both locations and time stamps (ltraj considers these "Type II" trajectories), and that there is a variable time lag between relocations.  
+
+An ltraj object is fundamentally a list of animal movement trajectories. If we want to view the trajectory data itself, we can access it using what I'll call normal R list syntax. In other words, if we want to look at the first list item, we use double brackets to do so. In this case, when we look at the data itself, we see that converting our simulated data to an ltraj object has calculated lots of useful things like step lengths, turning angles, etc. 
+```{r view-traj}
+head(traj[[1]])
+```
+  
+We can then plot lots of useful things! For example, we can look at the trajectory itself, or things like the sampling frequency/fix rate over time. In addition, we can look at "net squared displacement" (this column is called "R2n" in the ltraj object); this shows an animal's travel or displacement from its starting location, which can be handy for spotting shifts to new ranges.
+
+```{r}
+# plot the trajectory
+plot(traj)
+
+# plot sampling frequency (note how you can see some variability in the fix rate AND that we're missing locations!)
+plotltr(traj, "dt/3600") # dt = change in time between locations, and since it's in seconds, we'll divide by 3600 to view time in hours
+
+# plot net squared displacement
+plotltr(traj, "R2n") # we can see that this individual had three main ranges, with a couple of shifts in between them
+```
+  
+Now that we've taken a look at our data, to fit HMMs, we need to make our trajectory **regular**: this means we need equal time steps between locations. We can fix some of the irregularity by just rounding the timing of our fixes to the nearest hour, since our data was "collected" at the top of the hour every 4 hours. If our data were collected every 15 minutes, we could simply round to that fix schedule. Let's start by doing this rounding procedure:
+
+```{r round-fixes}
+#### prep the data ####
+### need to make trajectory regular (except for missing locations) by rounding timing of locations ###
+
+# convert trajectory object to a dataframe
+ddf <- ld(disp)
+head(ddf)
+
+# update print.POSIXct so that it always gives HH:MM:SS (otherwise, drops times for midnight)
+print.POSIXct <- function(x,...)print(format(x,"%Y-%m-%d %H:%M:%S"))
+
+# function for rounding date/time to nearest hour (returns error if input is greater than 15 minutes from nearest hour)
+round.datetime <- function(x){
+  minute <- as.numeric(format(x, "%M"))
+  if(minute<30){
+    out <- as.POSIXct(paste0(format(x, "%Y-%m-%d %H"), ":00:00"), tz = "America/Chicago")
+  }else if(minute>=30){
+    hour <- as.numeric(format(x, "%H"))+1
+    
+    if(hour==25){
+      hour <- 1
+      day <- as.Date(x, tz = "America/Chicago")+1
+      out <- as.POSIXct(paste0(day, " ", hour, ":00:00"), tz = "America/Chicago")
+    }else{
+      out <- as.POSIXct(paste0(format(x, "%Y-%m-%d"), " ", hour, ":00:00"), tz = "America/Chicago")
+    }
+  }
+  
+  dt <- abs(difftime(x, out, tz = "America/Chicago", units = "mins"))
+  
+  if(dt > 15){
+    out <- "error"
+  }else{
+    out <- format(out, "%Y-%m-%d %H:%M:%S") # need to output as character string and convert back to POSIXct later
+  }
+  return(out)
+}
+
+
+# use new function to round date/times and view number of fixes that fell more than 15 min from top of the hour
+ddf$round.time <- sapply(ddf$date, round.datetime)
+nrow(ddf[ddf$round.time=="error",])
+
+# keep the fixes that are within 15 min of the top of the hour
+ddf2 <- ddf[ddf$round.time!="error",]
+ddf2$round.time <- as.POSIXct(ddf2$round.time, tz = "America/Chicago")
+
+# check frequency of fixes, regularity of data
+ddf2$dt2 <- NA
+for(i in 2:nrow(ddf2)){
+  ddf2$dt2[i] <- difftime(ddf2$round.time[i], ddf2$round.time[i-1], tz = "America/Chicago", units = "hours")
+}
+table(ddf2$dt2)
+
+
+# drop the fixes that don't have a unique date/time stamp (time difference from previous fix = 0)
+ddf3 <- subset(ddf2, ddf2$dt2 != 0 | is.na(ddf2$dt2))
+
+```
+
+
+```{r}
+
+# drop the once daily fixes at the end of the trajectory (dispersal has already occurred and don't want to interpolate across those big gaps)
+ddf3 <- subset(ddf3, as.Date(ddf3$round.time, "America/Chicago") < as.Date("2017-11-01", tz = "America/Chicago"))
+table(ddf3$dt2) # should only have time differences of 1, 2, 3, 4, or 8 hours now
+# view the time span, frequency of fixes
+plot(ddf3$round.time, rep("1", nrow(ddf3)))
+
+# move forward with this regularized, trimmed dataset
+ddf <- ddf3
 
 
 ```
