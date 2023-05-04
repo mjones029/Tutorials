@@ -24,6 +24,6 @@ You can learn more about me at my [main website](http://www.marieljgilbertson.we
 
 <center>  
 
-![I hope the tutorials here help you feel as serene as this beach in Tasmania](./Video_files/Taz_beach.jpeg)  
+![](./Video_files/Taz_beach.jpeg)  
 
 </center>  
