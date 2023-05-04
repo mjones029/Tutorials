@@ -9,18 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-<br>  
+  
+   
 ## Welcome!
 
 This website is intended for sharing various tutorials for the analysis and presentation of ecological data. Basically everything you see here will be based in the R programming language, with the occasional use of other software tools. 
 
-<br>
+  
+  
 ## About me
 I am a research scientist in Dr. Wendy Turner's lab at the University of Wisconsin–Madison, where I study white-tailed deer movement ecology and chronic wasting disease transmission. I previously completed my DVM/PhD dual-degree at the University of Minnesota. In my dissertation research with Dr. Meggan Craft, I studied feline retrovirus transmission dynamics in the endangered Florida panther.  
 
 More broadly, I study the drivers and dynamics of infectious disease transmission in wildlife. My work is highly interdisciplinary, drawing from bioinformatics, movement ecology, disease ecology, and veterinary medicine, and I have extensive experience in network and computational modeling.  
 
-You can learn more about me at my [main website](http://www.marieljgilbertson.weebly.com) and see the most up-to-date list of my publications on my [Google Scholar](https://scholar.google.com/citations?user=S-81O6EAAAAJ&hl=en&oi=ao) page.
+You can learn more about me at my [main website](http://www.marieljgilbertson.weebly.com) and see the most up-to-date list of my publications on my [Google Scholar](https://scholar.google.com/citations?user=S-81O6EAAAAJ&hl=en&oi=ao) page.  
+
 
 <center>  
 
