@@ -166,8 +166,9 @@ ggplot(p5, aes(x = x, y = y)) + geom_path() +
 
 # remove last step of each phase trajectory so no duplicated locations when all phases are combined...except sometimes GPS collars accidentally transmit the same location twice (which can be a problem in HMMs), so let's leave a couple duplicate locations for use to "clean up" later. 
 p1 <- p1[-c(nrow(p1)),] 
+p2 <- p2[-c(nrow(p2)),] 
 p3 <- p3[-c(nrow(p3)),] 
-
+p4 <- p4[-c(nrow(p4)),] 
 
 
 # combine phases and view
@@ -176,7 +177,7 @@ ggplot(p, aes(x = x, y = y)) + geom_path() +
   coord_fixed() + theme_bw()
 
 # add time stamps; we'll say that we have locations every 4 hours
-p$date <- seq(as.POSIXct("2017-04-01 04:00:00"), by = (4*60*60), length.out = nrow(p))
+p$date <- seq(as.POSIXct("2017-04-01 04:00:00", tz = "America/Chicago"), by = (4*60*60), length.out = nrow(p))
 
 
 ```
@@ -192,6 +193,8 @@ In reality, we'd also be missing some locations because, for example, the collar
 ```{r drop-locs}
 drop <- sample(1:nrow(p), size = 0.02*nrow(p), replace = F)
 pd <- p[-c(drop),]
+pm <- p[drop,] # Just for fun, let's save these dropped locations in a separate object for now. You'll see why later...
+pm <- pm[order(pm$real.time),]
 
 ggplot(p, aes(x = x, y = y, color = real.time)) + geom_path() + 
   coord_fixed() + theme_bw() + ggtitle("Simulated 'messy' data")
@@ -220,7 +223,7 @@ head(traj[[1]])
   
 We can then plot lots of useful things! For example, we can look at the trajectory itself, or things like the sampling frequency/fix rate over time. In addition, we can look at "net squared displacement" (this column is called "R2n" in the ltraj object); this shows an animal's travel or displacement from its starting location, which can be handy for spotting shifts to new ranges.
 
-```{r}
+```{r plotltr}
 # plot the trajectory
 plot(traj)
 
@@ -234,25 +237,23 @@ plotltr(traj, "R2n") # we can see that this individual had three main ranges, wi
 Now that we've taken a look at our data, to fit HMMs, we need to make our trajectory **regular**: this means we need equal time steps between locations. We can fix some of the irregularity by just rounding the timing of our fixes to the nearest hour, since our data was "collected" at the top of the hour every 4 hours. If our data were collected every 15 minutes, we could simply round to that fix schedule. Let's start by doing this rounding procedure:
 
 ```{r round-fixes}
-#### prep the data ####
-### need to make trajectory regular (except for missing locations) by rounding timing of locations ###
 
-# convert trajectory object to a dataframe
-ddf <- ld(disp)
+# let's convert trajectory object to a dataframe
+ddf <- ld(traj)
 head(ddf)
 
-# update print.POSIXct so that it always gives HH:MM:SS (otherwise, drops times for midnight)
+# we're also going to update the "print.POSIXct" function so that it always gives HH:MM:SS (otherwise, it'll often drop the HH:MM:SS for midnight)
 print.POSIXct <- function(x,...)print(format(x,"%Y-%m-%d %H:%M:%S"))
 
-# function for rounding date/time to nearest hour (returns error if input is greater than 15 minutes from nearest hour)
+# now, we'll write a function for rounding date/time to nearest hour (it will also return an error if a time is greater than 15 minutes from nearest hour)
 round.datetime <- function(x){
   minute <- as.numeric(format(x, "%M"))
-  if(minute<30){
+  if(minute<30){ # if time is before HH:30, then round down an hour
     out <- as.POSIXct(paste0(format(x, "%Y-%m-%d %H"), ":00:00"), tz = "America/Chicago")
-  }else if(minute>=30){
+  }else if(minute>=30){ # if time is at or after HH:30, round up an hour
     hour <- as.numeric(format(x, "%H"))+1
     
-    if(hour==25){
+    if(hour==25){ # if rounding up an hour makes hour = 25, make that 1am on the next day
       hour <- 1
       day <- as.Date(x, tz = "America/Chicago")+1
       out <- as.POSIXct(paste0(day, " ", hour, ":00:00"), tz = "America/Chicago")
@@ -261,6 +262,7 @@ round.datetime <- function(x){
     }
   }
   
+  # check the time difference between the original time and the new rounded time; if it's >15 min, return an error
   dt <- abs(difftime(x, out, tz = "America/Chicago", units = "mins"))
   
   if(dt > 15){
@@ -272,38 +274,177 @@ round.datetime <- function(x){
 }
 
 
-# use new function to round date/times and view number of fixes that fell more than 15 min from top of the hour
+# let's use our new function to round date/times and view number of fixes that fell more than 15 min from top of the hour
 ddf$round.time <- sapply(ddf$date, round.datetime)
+head(ddf)
 nrow(ddf[ddf$round.time=="error",])
+# Great! None of our fixes were more than 15 minutes from the top of the hour - that's good since that's how we simulated it in the first place!
 
-# keep the fixes that are within 15 min of the top of the hour
-ddf2 <- ddf[ddf$round.time!="error",]
-ddf2$round.time <- as.POSIXct(ddf2$round.time, tz = "America/Chicago")
 
-# check frequency of fixes, regularity of data
-ddf2$dt2 <- NA
-for(i in 2:nrow(ddf2)){
-  ddf2$dt2[i] <- difftime(ddf2$round.time[i], ddf2$round.time[i-1], tz = "America/Chicago", units = "hours")
+# let's now check the frequency of our fixes with these new rounded times
+# we can loop through the rows of our data and compare each time stamp to the one before it:
+ddf$dt2 <- NA
+for(i in 2:nrow(ddf)){
+  ddf$dt2[i] <- difftime(ddf$round.time[i], ddf$round.time[i-1], tz = "America/Chicago", units = "hours")
 }
-table(ddf2$dt2)
+table(ddf$dt2)
+```
+  
+    
+We can that our data now has a nice, regular fix rate of every four hours, with the exception of the seven fixes that are missing (where the fix rate is eight hours).  
 
+To finish regularizing our data, we'll interpolate our missing locations! *momentuHMM* has a handy wrapper function (crawlWrap) that will allow us to to complete this interpolation. Note that I will use the same hand-waving as the *momentuHMM* user guide and say: for the choice of initial parameters in crawlWrap, check out the *crawl* package documentation.
 
-# drop the fixes that don't have a unique date/time stamp (time difference from previous fix = 0)
-ddf3 <- subset(ddf2, ddf2$dt2 != 0 | is.na(ddf2$dt2))
+```{r interpolate-gaps}
+## let's take a look at the distribution of our step lengths and turning angles
+hist(ddf$dist, breaks = 10)
+hist(ddf$rel.angle)
+
+# for crawlWrap function, just keep the ID, time, x, and y columns
+ddf <- ddf[,c("id", "round.time", "x", "y")]
+colnames(ddf) <- c("ID", "time", "x", "y")
+ddf$time <- as.POSIXct(ddf$time, tz = "America/Chicago") # time MUST be POSIXct class for the crawlWrap function. 
+
+# use crawlWrap() to fit a continuous time correlated random walk and predict locations every 4 hours
+d.crw <- crawlWrap(obsData=ddf, timeStep="4 hours",
+                   theta=c(2, 0), fixPar=c(NA,NA))
+
+cd <- d.crw$crwPredict
+head(cd)
+```
+  
+  
+We now have interpolated, completely regular data! Let's take a look to verify. Note: if your data has variable fix rates - say fixes every 2 hours for 2 months, and then every 4 hours after that, and you've interpolated for every 4 hours - you may yet have to drop "extra" locations. So while our data is now "perfectly regular," you might have to add some more cleaning steps with your own.  
+
+Bonus: remember earlier when I had us save the locations we randomly removed? Let's see how our predicted/interpolated locations compare to the original ones. 
+
+```{r check-interpolation}
+## we can use our same looping operating to check fix rates from before:
+new.fix.rates <- vector("numeric", length = nrow(cd)-1)
+for(i in 2:nrow(cd)){
+  new.fix.rates[i-1] <- difftime(cd$time[i], cd$time[i-1], tz = "America/Chicago", units = "hours")
+}
+table(new.fix.rates)
+## perfect! nice and regular!
+
+## now let's plot our predicted and observed locations...
+ggplot() + 
+  geom_path(data = cd, aes(x = mu.x, y = mu.y)) + 
+  geom_point(data = cd[is.na(cd$x),], aes(x = mu.x, y = mu.y), color = "#225ea8") +
+  geom_point(data = pm, aes(x = x, y = y), color = "#cb181d") +
+  coord_fixed() + theme_bw()
 
 ```
 
+Our predictions (blue) don't look too terrible, compared to the real locations (red). However, uncertainty in the "real" location for the missing observations is why the *momentuHMM* creators recommend "mutlitple imputation" to account for missing data. Basically, you would interpolate missing points many times, fitting the same HMM each time, to account for that uncertainty. *momentuHMM* has some handy functions built in for doing this multiple imputation, so you can build it into your workflow pretty seamlessly. For simiplicity, we'll just do a single interpolation, but know that multiple imputation is a nice way to handle missing data.  
 
-```{r}
+All right, last thing before we start fitting HMMs, we're just going to use *momentuHMM's* prepData() function to preprocess the data so it has all the information necessary for model fitting.
 
-# drop the once daily fixes at the end of the trajectory (dispersal has already occurred and don't want to interpolate across those big gaps)
-ddf3 <- subset(ddf3, as.Date(ddf3$round.time, "America/Chicago") < as.Date("2017-11-01", tz = "America/Chicago"))
-table(ddf3$dt2) # should only have time differences of 1, 2, 3, 4, or 8 hours now
-# view the time span, frequency of fixes
-plot(ddf3$round.time, rep("1", nrow(ddf3)))
+```{r final-prep-data}
+md <- prepData(data = d.crw)
+head(md)
+```
 
-# move forward with this regularized, trimmed dataset
-ddf <- ddf3
+  
+Now we're ready to fit some models!  
+  
+### Model fitting
+  
+There's loads of nuance you can build into HMMs using *momentuHMM*. The user guide **is** over 150 pages long, after all. I'm obviously not going to attempt to get into all of that. You should definitely check out the *momentuHMM* guide! Here, we'll just fit two super simple models without any covariates: one with two behavioral states and one with three.  
+
+**Two behavioral states**
+
+```{r fit-two-state-model}
+
+### take a look at our data ###
+# First off, we can check the autocorrelation function to see if our step lengths show cyclical pattern (they don't)
+acf(md$step[!is.na(md$step)],lag.max=100)
+# also look at histograms of step lengths and turning angles to choose good starting parameter values
+plot(md)
+
+### build and fit the model ###
+# label states
+stateNames <- c("encamped","traveling")
+# distributions for observation processes
+dist = list(step = "gamma", angle = "wrpcauchy")
+# initial parameters
+Par0_m1 <- list(step=c(1, 6, 1, 2),angle=c(3, 0, 0.5, 0.8)) # mean, sd of gamma for each state (mean, mean, sd, sd); mean and concentration of wrapped Cauchy for each state
+# fit model
+m1 <- fitHMM(data = md, nbStates = 2, dist = dist, Par0 = Par0_m1,
+             estAngleMean = list(angle=TRUE), stateNames = stateNames)
+m1
+```
 
 
+Hooray! We fit a model! And the step length and turning angle parameter estimates make a lot of sense, given the parameters we used for simulations. Let's see what happens if we assign each step a behavioral state. Do we recover the behavioral states as we simulated them? 
+```{r check-two-state-model}
+### view/check model outputs ###
+## For a given model, the function viterbi() computes the most likely state sequence
+states <- viterbi(m1)
+# derive percentage of time spent in each state 
+table(states)/nrow(md)
+# about 83% of steps attributed to "encamped" state - that's right on, since we simulated 300/360 = 83.33% of our steps in a "resident" state. 
+
+## model fit can be assessed using the pseudo-residuals (e.g., residual autocorrelation fucntion plot below)
+# compute pseudo-residuals for the steps and the angles
+pr <- pseudoRes(m1)
+# plot the ACF of step pseudo-residuals
+acf(pr$stepRes[!is.na(pr$stepRes)],lag.max = 100) # this looks pretty good! which it should, since we're using really clean simulated data...
+
+
+## visualize model with generic plot function
+plot(m1, plotCI = TRUE)
+
+```
+
+As we can see with our final colored trajectory plot, our model has done an excellent job at predicting behavioral states with our trajectory. Hooray! It ought to do a good job since our data is all simulated...  
+
+But let's now see what happens if we fit a model with three behavioral states.  
+
+**Three behavioral states**  
+
+Let's say we expect to have an encamped behavior with short steps and moderately variable turning angles, an intermediate "searching" behavior with intermediate step lengths and highly variable turning angles, and a traveling behavior with long step lengths and limited variation in turning angles. 
+```{r fit-three-state-model}
+
+### build and fit the model ###
+# label states
+stateNames <- c("encamped", "searching", "traveling")
+# distributions for observation processes
+dist = list(step = "gamma", angle = "wrpcauchy")
+# initial parameters
+Par0_m2 <- list(step=c(1, 3, 6, 1, 2, 3),angle=c(3, 0, 0, 0.5, 0.1, 0.8)) # mean, sd of gamma for each state (mean, mean, sd, sd); mean and concentration of wrapped Cauchy for each state
+# fit model
+m2 <- fitHMM(data = md, nbStates = 3, dist = dist, Par0 = Par0_m2,
+             estAngleMean = list(angle=TRUE), stateNames = stateNames)
+m2
+```
+
+We fit another model! Woo! Let's take a look at some diagnostics and check the AICs associated with our two models.
+```{r check-three-state-model}
+### view/check model outputs ###
+## For a given model, the function viterbi() computes the most likely state sequence
+states <- viterbi(m2)
+# derive percentage of time spent in each state 
+table(states)/nrow(md)
+
+## model fit can be assessed using the pseudo-residuals (e.g., residual autocorrelation fucntion plot below)
+# compute pseudo-residuals for the steps and the angles
+pr <- pseudoRes(m2)
+# plot the ACF of step pseudo-residuals
+acf(pr$stepRes[!is.na(pr$stepRes)],lag.max = 100) # this looks pretty good! which it should, since we're using really clean simulated data...
+
+
+## visualize model with generic plot function
+plot(m2, plotCI = TRUE)
+
+# compare AIC
+AIC(m1, m2)
+```
+
+What you're hopefully noticing is that our AIC values suggest we have better support for our three state model than our two state one. I find this fascinating, considering we know we only simulated two states. I also find this an important reminder about the limitations of HMMs: they can't actually tell us what an animal is doing in a given detected "behavioral state," and they can't tell us if a behavioral state is *biologically significant.* So always [use caution](https://movementecologyjournal.biomedcentral.com/articles/10.1186/s40462-021-00264-8) when using and interpreting hidden Markov models with animal movement data.  
+
+On that happy note, thanks for coming!  
+
+```{r session-info}
+sessionInfo()
 ```

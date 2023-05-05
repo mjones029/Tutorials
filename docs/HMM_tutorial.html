@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Marie Gilbertson" />
+
+<meta name="date" content="2023-05-04" />
+
+<title>Hidden Markov Modeling Tutorial</title>
+
+<script src="site_libs/header-attrs-2.16/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+details > summary > p:only-child {
+  display: inline;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark the anchor link active (and if it's in a dropdown, also mark that active)
+  var dropdown = menuAnchor.closest('li.dropdown');
+  if (window.bootstrap) { // Bootstrap 4+
+    menuAnchor.addClass('active');
+    dropdown.find('> .dropdown-toggle').addClass('active');
+  } else { // Bootstrap 3
+    menuAnchor.parent().addClass('active');
+    dropdown.addClass('active');
+  }
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbar" data-bs-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Tutorials</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="Spatial_stats_tutorial.html">Spatial stats tutorial</a>
+</li>
+<li>
+  <a href="Movement_video_tutorial.html">Movement video tutorial</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+
+
+<h1 class="title toc-ignore">Hidden Markov Modeling Tutorial</h1>
+<h4 class="author">Marie Gilbertson</h4>
+<h4 class="date">2023-05-04</h4>
+
+</div>
+
+
+<div id="preamble" class="section level3">
+<h3>Preamble</h3>
+<p>What this tutorial does:</p>
+<ol style="list-style-type: decimal">
+<li>Demonstrates a simple example of fitting hidden Markov models (HMM)
+to animal movement data.</li>
+</ol>
+<p>What this tutorial does NOT do:</p>
+<ol style="list-style-type: decimal">
+<li>Teach you the underlying theory for HMMs, explore the vast range of
+uses of HMMs, or teach how to troubleshoot inital parameter selection.
+For that kind of information, may I suggest checking out the very
+thorough <a
+href="https://cran.r-project.org/web/packages/momentuHMM/vignettes/momentuHMM.pdf">guide
+to using the R package momentuHMM</a>. This tutorial is meant as a
+technical and very simple introduction to fitting HMMs with
+momentuHMM.</li>
+</ol>
+<p>Now that we’ve got the disclaimers out of the way, let’s get
+started!</p>
+<p>First things first, let’s load the R packages we’ll need.</p>
+<pre class="r"><code>##### Clear Environment #####
+remove(list=ls())
+
+
+#### load libraries ####
+library(momentuHMM)
+library(ggplot2)
+library(adehabitatHR)
+library(lubridate)</code></pre>
+</div>
+<div id="simulate-data" class="section level3">
+<h3>Simulate data</h3>
+<p>To make it possible for anyone to replicate this workflow, we’re
+going to simulate some animal movement data.</p>
+<p>We are going to be working through an example of using HMMs to
+identify different “behavioral states” for an animal, based on their
+movement data. That means that our simulated individual needs to have
+mutliple behavioral states. To keep things simple, we’ll simulate a
+<strong>resident state</strong> characterized by short steps, meandering
+turning angles, and attraction to a central home range. Our other
+behavioral state with be a <strong>traveling state</strong> where our
+animal takes longer steps with restriced turning angles (we’ll have them
+generally move sort of straight ahead).</p>
+<p>To do these simulations, we can just use a simple biased correlated
+random walk (BCRW) movement model, but we will need a few functions to
+make that happen. The R functions we’ll use for this originally come
+from this lovely paper from <a
+href="https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2656.12198">Long
+et al 2014</a>.</p>
+<p><em>Note: if you’re not comfortable with how we write functions in R,
+don’t sweat it. One of these days I’ll make a little tutorial about
+writing functions. In the meantime, just trust me that this works and
+that you don’t need this to analyze your own real data.</em></p>
+<pre class="r"><code>## first we have a function for simulating a biased correlated random walk
+BCRW_sim &lt;- function(
+    n=100,          #number of movement steps
+    h=0.25,         #step length parameter
+    rho=0,          #bias correlation parameter (0-1, where 0 -&gt; unbiased, uncorrelated random walk, and 1 -&gt; biased, deterministic movement)
+    b=1,            #bias strength parameter
+    c=0,            #bias distance decay parameter
+    y0=c(0,0),       #animal starting location
+    ya=c(0,0)        #animal attraction location
+){
+  
+  #---- Main Function ------
+  y &lt;- y0
+  y.t &lt;- y
+  theta.y &lt;- runif(1,-pi,pi)       #first direction is random
+  
+  
+  for (i in 1:n){
+    
+    delta &lt;- sqrt(sum((ya-y)^2))                              #distance to attraction point 
+    psi &lt;- atan2(ya[2]-y[2],ya[1]-y[1])                       #angle toward attraction point
+    beta &lt;- tanh(b*delta^c)                                   #bias effect     
+    mu &lt;- w.circ.mean(c(theta.y,psi),c(1-beta,beta))          #biased direction
+    theta.y &lt;- rwrpnorm(1,mu,rho)                             #&quot;draw&quot; actual turning angle based on &quot;expected&quot; angle, constrained by bias correlation parameter
+    #step length from chi-squared distribution
+    d.y &lt;- h*rchi(1)
+    y. &lt;- y + c(d.y*cos(theta.y),d.y*sin(theta.y))            #calculate this &quot;step&quot;
+    
+    
+    #Build the trajectory
+    y.t &lt;- rbind(y.t,y.)        
+    #Save for next step!
+    y &lt;- y.
+  }
+  
+  y.out &lt;- data.frame(y.t,row.names=NULL)
+  colnames(y.out) &lt;- c(&quot;x&quot;,&quot;y&quot;)
+  
+  #add date/time to trajectory; considers date/time to be on a per-minute basis
+  date &lt;- seq(1, 60*(n+1), 60)
+  y.out$date &lt;- as_datetime(date)
+  return(y.out)
+}
+
+#Weighted circular mean calculation (for the bias direction)
+w.circ.mean &lt;- function (x,w) 
+{
+  sinr &lt;- sum(w*sin(x)) 
+  cosr &lt;- sum(w*cos(x)) 
+  circmean &lt;- atan2(sinr, cosr) 
+  circmean 
+}</code></pre>
+<p>For our resident state, we’ll have our animal’s movements be biased
+towards its first location when it started in this movement state; this
+will cause them to stick around that general location. For our traveling
+state, we’ll set the bias to some distant point so they head off in some
+other direction. We’ll otherwise use the step length and bias parameters
+to create our two behavioral states. We’ll also have our animal switch
+back and forth between the states a few times.</p>
+<pre class="r"><code>set.seed(32794)
+
+
+
+#### Simulate Dispersal ####
+## We&#39;ll simulate dispersal in two &quot;phases&quot;
+## Phase 1: resident around point (0,0)
+## Phase 2: traveling toward point (50, 50)
+## Phase 3: resident around new range
+## Phase 4: traveling toward point (150, 100)
+## Phase 5: resident around new range
+
+
+# set duration (in number of locations/fixes) for phase 1
+phase1.n &lt;- 100
+# simulate and view phase 1 movement
+p1 &lt;- BCRW_sim(n = phase1.n, h = 2, rho = 0.8, y0 = c(0,0), ya = c(0,0))
+ggplot(p1, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-1.png" width="672" /></p>
+<pre class="r"><code># take the final location from phase 1 to use as the starting location for phase 2
+end1 &lt;- tail(p1[,c(&quot;x&quot;, &quot;y&quot;)],1)
+# simulate and view phase 2 movement
+phase2.n &lt;- 30
+p2 &lt;- BCRW_sim(n = phase2.n, h = 5, rho = 0.85, y0 = c(end1$x, end1$y), ya = c(500, 500))
+ggplot(p2, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-2.png" width="672" /></p>
+<pre class="r"><code>end2 &lt;- tail(p2[,c(&quot;x&quot;, &quot;y&quot;)],1)
+# simulate and view phase 3 movement
+phase3.n &lt;- 100
+p3 &lt;- BCRW_sim(n = phase3.n, h = 2, rho = 0.8, y0 = c(end2$x, end2$y), ya = c(end2$x, end2$y))
+ggplot(p3, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-3.png" width="672" /></p>
+<pre class="r"><code># take the final location from phase 3 to use as the starting location for phase 4
+end3 &lt;- tail(p3[,c(&quot;x&quot;, &quot;y&quot;)],1)
+# simulate and view phase 2 movement
+phase4.n &lt;- 30
+p4 &lt;- BCRW_sim(n = phase4.n, h = 5, rho = 0.85, y0 = c(end3$x, end3$y), ya = c(1000, 0))
+ggplot(p4, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-4.png" width="672" /></p>
+<pre class="r"><code>end4 &lt;- tail(p4[,c(&quot;x&quot;, &quot;y&quot;)],1)
+# simulate and view phase 3 movement
+phase5.n &lt;- 100
+p5 &lt;- BCRW_sim(n = phase5.n, h = 2, rho = 0.8, y0 = c(end4$x, end4$y), ya = c(end4$x, end4$y))
+ggplot(p5, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-5.png" width="672" /></p>
+<pre class="r"><code># remove last step of each phase trajectory so no duplicated locations when all phases are combined...except sometimes GPS collars accidentally transmit the same location twice (which can be a problem in HMMs), so let&#39;s leave a couple duplicate locations for use to &quot;clean up&quot; later. 
+p1 &lt;- p1[-c(nrow(p1)),] 
+p2 &lt;- p2[-c(nrow(p2)),] 
+p3 &lt;- p3[-c(nrow(p3)),] 
+p4 &lt;- p4[-c(nrow(p4)),] 
+
+
+# combine phases and view
+p &lt;- rbind(p1, p2, p3, p4, p5)
+ggplot(p, aes(x = x, y = y)) + geom_path() + 
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/simulate-data-6.png" width="672" /></p>
+<pre class="r"><code># add time stamps; we&#39;ll say that we have locations every 4 hours
+p$date &lt;- seq(as.POSIXct(&quot;2017-04-01 04:00:00&quot;, tz = &quot;America/Chicago&quot;), by = (4*60*60), length.out = nrow(p))</code></pre>
+<p>To be more like real telemetry data, let’s add some noise to our time
+stamps. GPS collars really never collect a location at perfect
+intervals, and this can impact our HMM, so let’s allow all our time
+stamps to randomly vary by up to 10 minutes before or after the
+“scheduled,” every-4-hours time.</p>
+<pre class="r"><code>p$real.time &lt;- p$date + sample(c((-10*60):(10*60)), size = nrow(p), replace = T)
+head(p)</code></pre>
+<pre><code>##            x          y                date           real.time
+## 1  0.0000000  0.0000000 2017-04-01 04:00:00 2017-04-01 04:04:40
+## 2 -0.6974744 -3.0428187 2017-04-01 08:00:00 2017-04-01 07:50:36
+## 3 -1.2716228 -1.6352010 2017-04-01 12:00:00 2017-04-01 12:05:44
+## 4 -1.0848808 -0.2331147 2017-04-01 16:00:00 2017-04-01 16:04:21
+## 5 -2.4086289  1.3874874 2017-04-01 20:00:00 2017-04-01 19:57:33
+## 6 -1.5935481  0.7575514 2017-04-02 00:00:00 2017-04-02 00:07:11</code></pre>
+<p>In reality, we’d also be missing some locations because, for example,
+the collar would fail to transmit the animal’s location. These missing
+locations can impact our HMM, so let’s also randomly drop 2% of our
+locations.</p>
+<pre class="r"><code>drop &lt;- sample(1:nrow(p), size = 0.02*nrow(p), replace = F)
+pd &lt;- p[-c(drop),]
+pm &lt;- p[drop,] # Just for fun, let&#39;s save these dropped locations in a separate object for now. You&#39;ll see why later...
+pm &lt;- pm[order(pm$real.time),]
+
+ggplot(p, aes(x = x, y = y, color = real.time)) + geom_path() + 
+  coord_fixed() + theme_bw() + ggtitle(&quot;Simulated &#39;messy&#39; data&quot;)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/drop-locs-1.png" width="672" /></p>
+<p>Now we have a nice simulated dataset with a little added “messiness”
+to replicate what you might experience with real animal movement data.
+Naturally, that means it’s time to “clean up” our data!</p>
+</div>
+<div id="prepare-animal-movement-data" class="section level3">
+<h3>Prepare animal movement data</h3>
+<p>What’s the point in making our data “messy” if we’re just going to go
+and clean it up, you ask? Well, if you’re working with real data, it’s
+going to messy and it does no one any good to pretend otherwise.</p>
+<p>To begin with, let’s explore our data a little bit, pretending that
+we didn’t just simulate this ourselves. We can start by making our
+animal movement data an “ltraj” object so we can use some of the
+functions in the very handy <em>adehabitatLT</em> package.</p>
+<pre class="r"><code>traj &lt;- as.ltraj(xy = pd[,c(&quot;x&quot;, &quot;y&quot;)], date = pd$real.time, id = &quot;ind.1&quot;)
+traj</code></pre>
+<pre><code>## 
+## *********** List of class ltraj ***********
+## 
+## Type of the traject: Type II (time recorded)
+## * Time zone: America/Chicago *
+## Irregular traject. Variable time lag between two locs
+## 
+## Characteristics of the bursts:
+##      id burst nb.reloc NAs          date.begin            date.end
+## 1 ind.1 ind.1      354   0 2017-04-01 04:04:40 2017-05-31 03:56:53
+## 
+## 
+##  infolocs provided. The following variables are available:
+## [1] &quot;pkey&quot;</code></pre>
+<p>We can see that we now have an “ltraj” object containing the movement
+data for “ind.1.” There are 353 relocations, but since we haven’t added
+any “NAs” to our data, our object supposedly doesn’t have missing data
+(but you and I know that’s not true). We can also see the start and end
+dates for our data. Lastly, we can also see that we have both locations
+and time stamps (ltraj considers these “Type II” trajectories), and that
+there is a variable time lag between relocations.</p>
+<p>An ltraj object is fundamentally a list of animal movement
+trajectories. If we want to view the trajectory data itself, we can
+access it using what I’ll call normal R list syntax. In other words, if
+we want to look at the first list item, we use double brackets to do so.
+In this case, when we look at the data itself, we see that converting
+our simulated data to an ltraj object has calculated lots of useful
+things like step lengths, turning angles, etc.</p>
+<pre class="r"><code>head(traj[[1]])</code></pre>
+<pre><code>##            x          y                date         dx          dy     dist    dt      R2n   abs.angle  rel.angle
+## 1  0.0000000  0.0000000 2017-04-01 04:04:40 -0.6974744 -3.04281873 3.121733 13556 0.000000 -1.79612362         NA
+## 2 -0.6974744 -3.0428187 2017-04-01 07:50:36 -0.5741484  1.40761776 1.520209 15308 9.745216  1.95808295 -2.5289787
+## 3 -1.2716228 -1.6352010 2017-04-01 12:05:44  0.1867420  1.40208625 1.414468 14317 4.290907  1.43838692 -0.5196960
+## 4 -1.0848808 -0.2331147 2017-04-01 16:04:21 -1.3237481  1.62060214 2.092525 13992 1.231309  2.25571246  0.8173255
+## 5 -2.4086289  1.3874874 2017-04-01 19:57:33  0.8150808 -0.62993601 1.030134 14978 7.726614 -0.65796607 -2.9136785
+## 6 -1.5935481  0.7575514 2017-04-02 00:07:11  1.4888048  0.05139977 1.489692 13370 3.113280  0.03451048  0.6924766</code></pre>
+<p>We can then plot lots of useful things! For example, we can look at
+the trajectory itself, or things like the sampling frequency/fix rate
+over time. In addition, we can look at “net squared displacement” (this
+column is called “R2n” in the ltraj object); this shows an animal’s
+travel or displacement from its starting location, which can be handy
+for spotting shifts to new ranges.</p>
+<pre class="r"><code># plot the trajectory
+plot(traj)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/plotltr-1.png" width="672" /></p>
+<pre class="r"><code># plot sampling frequency (note how you can see some variability in the fix rate AND that we&#39;re missing locations!)
+plotltr(traj, &quot;dt/3600&quot;) # dt = change in time between locations, and since it&#39;s in seconds, we&#39;ll divide by 3600 to view time in hours</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/plotltr-2.png" width="672" /></p>
+<pre class="r"><code># plot net squared displacement
+plotltr(traj, &quot;R2n&quot;) # we can see that this individual had three main ranges, with a couple of shifts in between them</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/plotltr-3.png" width="672" /></p>
+<p>Now that we’ve taken a look at our data, to fit HMMs, we need to make
+our trajectory <strong>regular</strong>: this means we need equal time
+steps between locations. We can fix some of the irregularity by just
+rounding the timing of our fixes to the nearest hour, since our data was
+“collected” at the top of the hour every 4 hours. If our data were
+collected every 15 minutes, we could simply round to that fix schedule.
+Let’s start by doing this rounding procedure:</p>
+<pre class="r"><code># let&#39;s convert trajectory object to a dataframe
+ddf &lt;- ld(traj)
+head(ddf)</code></pre>
+<pre><code>##            x          y                date         dx          dy     dist    dt      R2n   abs.angle  rel.angle    id burst                      pkey
+## 1  0.0000000  0.0000000 2017-04-01 04:04:40 -0.6974744 -3.04281873 3.121733 13556 0.000000 -1.79612362         NA ind.1 ind.1 ind.1.2017-04-01 04:04:40
+## 2 -0.6974744 -3.0428187 2017-04-01 07:50:36 -0.5741484  1.40761776 1.520209 15308 9.745216  1.95808295 -2.5289787 ind.1 ind.1 ind.1.2017-04-01 07:50:36
+## 3 -1.2716228 -1.6352010 2017-04-01 12:05:44  0.1867420  1.40208625 1.414468 14317 4.290907  1.43838692 -0.5196960 ind.1 ind.1 ind.1.2017-04-01 12:05:44
+## 4 -1.0848808 -0.2331147 2017-04-01 16:04:21 -1.3237481  1.62060214 2.092525 13992 1.231309  2.25571246  0.8173255 ind.1 ind.1 ind.1.2017-04-01 16:04:21
+## 5 -2.4086289  1.3874874 2017-04-01 19:57:33  0.8150808 -0.62993601 1.030134 14978 7.726614 -0.65796607 -2.9136785 ind.1 ind.1 ind.1.2017-04-01 19:57:33
+## 6 -1.5935481  0.7575514 2017-04-02 00:07:11  1.4888048  0.05139977 1.489692 13370 3.113280  0.03451048  0.6924766 ind.1 ind.1 ind.1.2017-04-02 00:07:11</code></pre>
+<pre class="r"><code># we&#39;re also going to update the &quot;print.POSIXct&quot; function so that it always gives HH:MM:SS (otherwise, it&#39;ll often drop the HH:MM:SS for midnight)
+print.POSIXct &lt;- function(x,...)print(format(x,&quot;%Y-%m-%d %H:%M:%S&quot;))
+
+# now, we&#39;ll write a function for rounding date/time to nearest hour (it will also return an error if a time is greater than 15 minutes from nearest hour)
+round.datetime &lt;- function(x){
+  minute &lt;- as.numeric(format(x, &quot;%M&quot;))
+  if(minute&lt;30){ # if time is before HH:30, then round down an hour
+    out &lt;- as.POSIXct(paste0(format(x, &quot;%Y-%m-%d %H&quot;), &quot;:00:00&quot;), tz = &quot;America/Chicago&quot;)
+  }else if(minute&gt;=30){ # if time is at or after HH:30, round up an hour
+    hour &lt;- as.numeric(format(x, &quot;%H&quot;))+1
+    
+    if(hour==25){ # if rounding up an hour makes hour = 25, make that 1am on the next day
+      hour &lt;- 1
+      day &lt;- as.Date(x, tz = &quot;America/Chicago&quot;)+1
+      out &lt;- as.POSIXct(paste0(day, &quot; &quot;, hour, &quot;:00:00&quot;), tz = &quot;America/Chicago&quot;)
+    }else{
+      out &lt;- as.POSIXct(paste0(format(x, &quot;%Y-%m-%d&quot;), &quot; &quot;, hour, &quot;:00:00&quot;), tz = &quot;America/Chicago&quot;)
+    }
+  }
+  
+  # check the time difference between the original time and the new rounded time; if it&#39;s &gt;15 min, return an error
+  dt &lt;- abs(difftime(x, out, tz = &quot;America/Chicago&quot;, units = &quot;mins&quot;))
+  
+  if(dt &gt; 15){
+    out &lt;- &quot;error&quot;
+  }else{
+    out &lt;- format(out, &quot;%Y-%m-%d %H:%M:%S&quot;) # need to output as character string and convert back to POSIXct later
+  }
+  return(out)
+}
+
+
+# let&#39;s use our new function to round date/times and view number of fixes that fell more than 15 min from top of the hour
+ddf$round.time &lt;- sapply(ddf$date, round.datetime)
+head(ddf)</code></pre>
+<pre><code>##            x          y                date         dx          dy     dist    dt      R2n   abs.angle  rel.angle    id burst                      pkey          round.time
+## 1  0.0000000  0.0000000 2017-04-01 04:04:40 -0.6974744 -3.04281873 3.121733 13556 0.000000 -1.79612362         NA ind.1 ind.1 ind.1.2017-04-01 04:04:40 2017-04-01 04:00:00
+## 2 -0.6974744 -3.0428187 2017-04-01 07:50:36 -0.5741484  1.40761776 1.520209 15308 9.745216  1.95808295 -2.5289787 ind.1 ind.1 ind.1.2017-04-01 07:50:36 2017-04-01 08:00:00
+## 3 -1.2716228 -1.6352010 2017-04-01 12:05:44  0.1867420  1.40208625 1.414468 14317 4.290907  1.43838692 -0.5196960 ind.1 ind.1 ind.1.2017-04-01 12:05:44 2017-04-01 12:00:00
+## 4 -1.0848808 -0.2331147 2017-04-01 16:04:21 -1.3237481  1.62060214 2.092525 13992 1.231309  2.25571246  0.8173255 ind.1 ind.1 ind.1.2017-04-01 16:04:21 2017-04-01 16:00:00
+## 5 -2.4086289  1.3874874 2017-04-01 19:57:33  0.8150808 -0.62993601 1.030134 14978 7.726614 -0.65796607 -2.9136785 ind.1 ind.1 ind.1.2017-04-01 19:57:33 2017-04-01 20:00:00
+## 6 -1.5935481  0.7575514 2017-04-02 00:07:11  1.4888048  0.05139977 1.489692 13370 3.113280  0.03451048  0.6924766 ind.1 ind.1 ind.1.2017-04-02 00:07:11 2017-04-02 00:00:00</code></pre>
+<pre class="r"><code>nrow(ddf[ddf$round.time==&quot;error&quot;,])</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code># Great! None of our fixes were more than 15 minutes from the top of the hour - that&#39;s good since that&#39;s how we simulated it in the first place!
+
+
+# let&#39;s now check the frequency of our fixes with these new rounded times
+# we can loop through the rows of our data and compare each time stamp to the one before it:
+ddf$dt2 &lt;- NA
+for(i in 2:nrow(ddf)){
+  ddf$dt2[i] &lt;- difftime(ddf$round.time[i], ddf$round.time[i-1], tz = &quot;America/Chicago&quot;, units = &quot;hours&quot;)
+}
+table(ddf$dt2)</code></pre>
+<pre><code>## 
+##   4   8 
+## 346   7</code></pre>
+<p>We can that our data now has a nice, regular fix rate of every four
+hours, with the exception of the seven fixes that are missing (where the
+fix rate is eight hours).</p>
+<p>To finish regularizing our data, we’ll interpolate our missing
+locations! <em>momentuHMM</em> has a handy wrapper function (crawlWrap)
+that will allow us to to complete this interpolation. Note that I will
+use the same hand-waving as the <em>momentuHMM</em> user guide and say:
+for the choice of initial parameters in crawlWrap, check out the
+<em>crawl</em> package documentation.</p>
+<pre class="r"><code>## let&#39;s take a look at the distribution of our step lengths and turning angles
+hist(ddf$dist, breaks = 10)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/interpolate-gaps-1.png" width="672" /></p>
+<pre class="r"><code>hist(ddf$rel.angle)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/interpolate-gaps-2.png" width="672" /></p>
+<pre class="r"><code># for crawlWrap function, just keep the ID, time, x, and y columns
+ddf &lt;- ddf[,c(&quot;id&quot;, &quot;round.time&quot;, &quot;x&quot;, &quot;y&quot;)]
+colnames(ddf) &lt;- c(&quot;ID&quot;, &quot;time&quot;, &quot;x&quot;, &quot;y&quot;)
+ddf$time &lt;- as.POSIXct(ddf$time, tz = &quot;America/Chicago&quot;) # time MUST be POSIXct class for the crawlWrap function. 
+
+# use crawlWrap() to fit a continuous time correlated random walk and predict locations every 4 hours
+d.crw &lt;- crawlWrap(obsData=ddf, timeStep=&quot;4 hours&quot;,
+                   theta=c(2, 0), fixPar=c(NA,NA))</code></pre>
+<pre><code>## Fitting 1 track(s) using crawl::crwMLE...
+## Individual ind.1...</code></pre>
+<pre><code>## Beginning SANN initialization ...</code></pre>
+<pre><code>## Beginning likelihood optimization ...</code></pre>
+<pre><code>## DONE
+## 
+## Predicting locations (and uncertainty) at 4 hours time steps for 1 track(s) using crawl::crwPredict... DONE</code></pre>
+<pre class="r"><code>cd &lt;- d.crw$crwPredict
+head(cd)</code></pre>
+<pre><code>##    TimeNum locType    ID                time          x          y       mu.x         nu.x       mu.y        nu.y se.mu.x   se.nu.x se.mu.y   se.nu.y     speed
+## 1   414177       p ind.1 2017-04-01 04:00:00  0.0000000  0.0000000  0.0000000 -0.103352048  0.0000000 -0.56902551       0 0.9493604       0 0.9493604 0.5783353
+## 3   414181       p ind.1 2017-04-01 08:00:00 -0.6974744 -3.0428187 -0.6974744 -0.192945894 -3.0428187 -0.24971841       0 0.8685887       0 0.8685887 0.3155747
+## 5   414185       p ind.1 2017-04-01 12:00:00 -1.2716228 -1.6352010 -1.2716228 -0.005370781 -1.6352010  0.43910028       0 0.8662270       0 0.8662270 0.4391331
+## 7   414189       p ind.1 2017-04-01 16:00:00 -1.0848808 -0.2331147 -1.0848808 -0.168853209 -0.2331147  0.41131279       0 0.8661610       0 0.8661610 0.4446230
+## 9   414193       p ind.1 2017-04-01 20:00:00 -2.4086289  1.3874874 -2.4086289 -0.114408123  1.3874874  0.11056611       0 0.8661592       0 0.8661592 0.1591040
+## 11  414197       p ind.1 2017-04-02 00:00:00 -1.5935481  0.7575514 -1.5935481  0.354446207  0.7575514 -0.08200423       0 0.8661592       0 0.8661592 0.3638088</code></pre>
+<p>We now have interpolated, completely regular data! Let’s take a look
+to verify. Note: if your data has variable fix rates - say fixes every 2
+hours for 2 months, and then every 4 hours after that, and you’ve
+interpolated for every 4 hours - you may yet have to drop “extra”
+locations. So while our data is now “perfectly regular,” you might have
+to add some more cleaning steps with your own.</p>
+<p>Bonus: remember earlier when I had us save the locations we randomly
+removed? Let’s see how our predicted/interpolated locations compare to
+the original ones.</p>
+<pre class="r"><code>## we can use our same looping operating to check fix rates from before:
+new.fix.rates &lt;- vector(&quot;numeric&quot;, length = nrow(cd)-1)
+for(i in 2:nrow(cd)){
+  new.fix.rates[i-1] &lt;- difftime(cd$time[i], cd$time[i-1], tz = &quot;America/Chicago&quot;, units = &quot;hours&quot;)
+}
+table(new.fix.rates)</code></pre>
+<pre><code>## new.fix.rates
+##   4 
+## 360</code></pre>
+<pre class="r"><code>## perfect! nice and regular!
+
+## now let&#39;s plot our predicted and observed locations...
+ggplot() + 
+  geom_path(data = cd, aes(x = mu.x, y = mu.y)) + 
+  geom_point(data = cd[is.na(cd$x),], aes(x = mu.x, y = mu.y), color = &quot;#225ea8&quot;) +
+  geom_point(data = pm, aes(x = x, y = y), color = &quot;#cb181d&quot;) +
+  coord_fixed() + theme_bw()</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/check-interpolation-1.png" width="672" /></p>
+<p>Our predictions (blue) don’t look too terrible, compared to the real
+locations (red). However, uncertainty in the “real” location for the
+missing observations is why the <em>momentuHMM</em> creators recommend
+“mutlitple imputation” to account for missing data. Basically, you would
+interpolate missing points many times, fitting the same HMM each time,
+to account for that uncertainty. <em>momentuHMM</em> has some handy
+functions built in for doing this multiple imputation, so you can build
+it into your workflow pretty seamlessly. For simiplicity, we’ll just do
+a single interpolation, but know that multiple imputation is a nice way
+to handle missing data.</p>
+<p>All right, last thing before we start fitting HMMs, we’re just going
+to use <em>momentuHMM’s</em> prepData() function to preprocess the data
+so it has all the information necessary for model fitting.</p>
+<pre class="r"><code>md &lt;- prepData(data = d.crw)
+head(md)</code></pre>
+<pre><code>##      ID     step      angle TimeNum locType                time         nu.x        nu.y se.mu.x   se.nu.x se.mu.y   se.nu.y     speed          x          y
+## 1 ind.1 3.121733         NA  414177       p 2017-04-01 04:00:00 -0.103352048 -0.56902551       0 0.9493604       0 0.9493604 0.5783353  0.0000000  0.0000000
+## 2 ind.1 1.520209 -2.5289787  414181       p 2017-04-01 08:00:00 -0.192945894 -0.24971841       0 0.8685887       0 0.8685887 0.3155747 -0.6974744 -3.0428187
+## 3 ind.1 1.414468 -0.5196960  414185       p 2017-04-01 12:00:00 -0.005370781  0.43910028       0 0.8662270       0 0.8662270 0.4391331 -1.2716228 -1.6352010
+## 4 ind.1 2.092525  0.8173255  414189       p 2017-04-01 16:00:00 -0.168853209  0.41131279       0 0.8661610       0 0.8661610 0.4446230 -1.0848808 -0.2331147
+## 5 ind.1 1.030134 -2.9136785  414193       p 2017-04-01 20:00:00 -0.114408123  0.11056611       0 0.8661592       0 0.8661592 0.1591040 -2.4086289  1.3874874
+## 6 ind.1 1.489692  0.6924766  414197       p 2017-04-02 00:00:00  0.354446207 -0.08200423       0 0.8661592       0 0.8661592 0.3638088 -1.5935481  0.7575514</code></pre>
+<p>Now we’re ready to fit some models!</p>
+</div>
+<div id="model-fitting" class="section level3">
+<h3>Model fitting</h3>
+<p>There’s loads of nuance you can build into HMMs using
+<em>momentuHMM</em>. The user guide <strong>is</strong> over 150 pages
+long, after all. I’m obviously not going to attempt to get into all of
+that. You should definitely check out the <em>momentuHMM</em> guide!
+Here, we’ll just fit two super simple models without any covariates: one
+with two behavioral states and one with three.</p>
+<p><strong>Two behavioral states</strong></p>
+<pre class="r"><code>### take a look at our data ###
+# First off, we can check the autocorrelation function to see if our step lengths show cyclical pattern (they don&#39;t)
+acf(md$step[!is.na(md$step)],lag.max=100)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/fit-two-state-model-1.png" width="672" /></p>
+<pre class="r"><code># also look at histograms of step lengths and turning angles to choose good starting parameter values
+plot(md)</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/fit-two-state-model-2.png" width="672" /><img src="HMM_tutorial_files/figure-html/fit-two-state-model-3.png" width="672" /></p>
+<pre class="r"><code>### build and fit the model ###
+# label states
+stateNames &lt;- c(&quot;encamped&quot;,&quot;traveling&quot;)
+# distributions for observation processes
+dist = list(step = &quot;gamma&quot;, angle = &quot;wrpcauchy&quot;)
+# initial parameters
+Par0_m1 &lt;- list(step=c(1, 6, 1, 2),angle=c(3, 0, 0.5, 0.8)) # mean, sd of gamma for each state (mean, mean, sd, sd); mean and concentration of wrapped Cauchy for each state
+# fit model
+m1 &lt;- fitHMM(data = md, nbStates = 2, dist = dist, Par0 = Par0_m1,
+             estAngleMean = list(angle=TRUE), stateNames = stateNames)</code></pre>
+<pre><code>## =======================================================================</code></pre>
+<pre><code>## Fitting HMM with 2 states and 2 data streams</code></pre>
+<pre><code>## -----------------------------------------------------------------------</code></pre>
+<pre><code>##  step ~ gamma(mean=~1, sd=~1)</code></pre>
+<pre><code>##  angle ~ wrpcauchy(mean=~1, concentration=~1)</code></pre>
+<pre><code>## 
+##  Transition probability matrix formula: ~1</code></pre>
+<pre><code>## 
+##  Initial distribution formula: ~1</code></pre>
+<pre><code>## =======================================================================</code></pre>
+<pre><code>## DONE</code></pre>
+<pre class="r"><code>m1</code></pre>
+<pre><code>## Value of the maximum log-likelihood: -1270.937 
+## 
+## 
+## step parameters:
+## ----------------
+##      encamped traveling
+## mean 2.450349  6.454635
+## sd   1.373183  3.883928
+## 
+## angle parameters:
+## -----------------
+##                 encamped  traveling
+## mean          -2.5988985 0.01468709
+## concentration  0.2084989 0.67436020
+## 
+## Regression coeffs for the transition probabilities:
+## ---------------------------------------------------
+##                1 -&gt; 2    2 -&gt; 1
+## (Intercept) -4.936799 -3.309343
+## 
+## Transition probability matrix:
+## ------------------------------
+##             encamped   traveling
+## encamped  0.99287361 0.007126386
+## traveling 0.03525204 0.964747956
+## 
+## Initial distribution:
+## ---------------------
+##     encamped    traveling 
+## 9.999999e-01 6.105066e-08</code></pre>
+<p>Hooray! We fit a model! And the step length and turning angle
+parameter estimates make a lot of sense, given the parameters we used
+for simulations. Let’s see what happens if we assign each step a
+behavioral state. Do we recover the behavioral states as we simulated
+them?</p>
+<pre class="r"><code>### view/check model outputs ###
+## For a given model, the function viterbi() computes the most likely state sequence
+states &lt;- viterbi(m1)
+# derive percentage of time spent in each state 
+table(states)/nrow(md)</code></pre>
+<pre><code>## states
+##        1        2 
+## 0.833795 0.166205</code></pre>
+<pre class="r"><code># about 83% of steps attributed to &quot;encamped&quot; state - that&#39;s right on, since we simulated 300/360 = 83.33% of our steps in a &quot;resident&quot; state. 
+
+## model fit can be assessed using the pseudo-residuals (e.g., residual autocorrelation fucntion plot below)
+# compute pseudo-residuals for the steps and the angles
+pr &lt;- pseudoRes(m1)
+# plot the ACF of step pseudo-residuals
+acf(pr$stepRes[!is.na(pr$stepRes)],lag.max = 100) # this looks pretty good! which it should, since we&#39;re using really clean simulated data...</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/check-two-state-model-1.png" width="672" /></p>
+<pre class="r"><code>## visualize model with generic plot function
+plot(m1, plotCI = TRUE)</code></pre>
+<pre><code>## Decoding state sequence... DONE</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/check-two-state-model-2.png" width="672" /><img src="HMM_tutorial_files/figure-html/check-two-state-model-3.png" width="672" /><img src="HMM_tutorial_files/figure-html/check-two-state-model-4.png" width="672" /></p>
+<p>As we can see with our final colored trajectory plot, our model has
+done an excellent job at predicting behavioral states with our
+trajectory. Hooray! It ought to do a good job since our data is all
+simulated…</p>
+<p>But let’s now see what happens if we fit a model with three
+behavioral states.</p>
+<p><strong>Three behavioral states</strong></p>
+<p>Let’s say we expect to have an encamped behavior with short steps and
+moderately variable turning angles, an intermediate “searching” behavior
+with intermediate step lengths and highly variable turning angles, and a
+traveling behavior with long step lengths and limited variation in
+turning angles.</p>
+<pre class="r"><code>### build and fit the model ###
+# label states
+stateNames &lt;- c(&quot;encamped&quot;, &quot;searching&quot;, &quot;traveling&quot;)
+# distributions for observation processes
+dist = list(step = &quot;gamma&quot;, angle = &quot;wrpcauchy&quot;)
+# initial parameters
+Par0_m2 &lt;- list(step=c(1, 3, 6, 1, 2, 3),angle=c(3, 0, 0, 0.5, 0.1, 0.8)) # mean, sd of gamma for each state (mean, mean, sd, sd); mean and concentration of wrapped Cauchy for each state
+# fit model
+m2 &lt;- fitHMM(data = md, nbStates = 3, dist = dist, Par0 = Par0_m2,
+             estAngleMean = list(angle=TRUE), stateNames = stateNames)</code></pre>
+<pre><code>## =======================================================================</code></pre>
+<pre><code>## Fitting HMM with 3 states and 2 data streams</code></pre>
+<pre><code>## -----------------------------------------------------------------------</code></pre>
+<pre><code>##  step ~ gamma(mean=~1, sd=~1)</code></pre>
+<pre><code>##  angle ~ wrpcauchy(mean=~1, concentration=~1)</code></pre>
+<pre><code>## 
+##  Transition probability matrix formula: ~1</code></pre>
+<pre><code>## 
+##  Initial distribution formula: ~1</code></pre>
+<pre><code>## =======================================================================</code></pre>
+<pre><code>## DONE</code></pre>
+<pre class="r"><code>m2</code></pre>
+<pre><code>## Value of the maximum log-likelihood: -1253.72 
+## 
+## 
+## step parameters:
+## ----------------
+##      encamped searching traveling
+## mean 2.031054  2.953091  6.489668
+## sd   1.291786  1.025997  3.865750
+## 
+## angle parameters:
+## -----------------
+##                  encamped  searching  traveling
+## mean          -0.67015627 -2.6871799 0.01329808
+## concentration  0.04596163  0.4669685 0.67152001
+## 
+## Regression coeffs for the transition probabilities:
+## ---------------------------------------------------
+##                1 -&gt; 2    1 -&gt; 3    2 -&gt; 1    2 -&gt; 3    3 -&gt; 1    3 -&gt; 2
+## (Intercept) -1.397874 -16.85267 -1.175272 -3.878384 -3.321863 -1234.668
+## 
+## Transition probability matrix:
+## ------------------------------
+##             encamped searching    traveling
+## encamped  0.80184625 0.1981537 3.846530e-08
+## searching 0.23223304 0.7522081 1.555884e-02
+## traveling 0.03482872 0.0000000 9.651713e-01
+## 
+## Initial distribution:
+## ---------------------
+##  encamped searching traveling 
+##         0         1         0</code></pre>
+<p>We fit another model! Woo! Let’s take a look at some diagnostics and
+check the AICs associated with our two models.</p>
+<pre class="r"><code>### view/check model outputs ###
+## For a given model, the function viterbi() computes the most likely state sequence
+states &lt;- viterbi(m2)
+# derive percentage of time spent in each state 
+table(states)/nrow(md)</code></pre>
+<pre><code>## states
+##         1         2         3 
+## 0.4653740 0.3711911 0.1634349</code></pre>
+<pre class="r"><code>## model fit can be assessed using the pseudo-residuals (e.g., residual autocorrelation fucntion plot below)
+# compute pseudo-residuals for the steps and the angles
+pr &lt;- pseudoRes(m2)
+# plot the ACF of step pseudo-residuals
+acf(pr$stepRes[!is.na(pr$stepRes)],lag.max = 100) # this looks pretty good! which it should, since we&#39;re using really clean simulated data...</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/check-three-state-model-1.png" width="672" /></p>
+<pre class="r"><code>## visualize model with generic plot function
+plot(m2, plotCI = TRUE)</code></pre>
+<pre><code>## Decoding state sequence... DONE</code></pre>
+<p><img src="HMM_tutorial_files/figure-html/check-three-state-model-2.png" width="672" /><img src="HMM_tutorial_files/figure-html/check-three-state-model-3.png" width="672" /><img src="HMM_tutorial_files/figure-html/check-three-state-model-4.png" width="672" /></p>
+<pre class="r"><code># compare AIC
+AIC(m1, m2)</code></pre>
+<pre><code>##   Model      AIC
+## 1    m2 2547.439
+## 2    m1 2563.875</code></pre>
+<p>What you’re hopefully noticing is that our AIC values suggest we have
+better support for our three state model than our two state one. I find
+this fascinating, considering we know we only simulated two states. I
+also find this an important reminder about the limitations of HMMs: they
+can’t actually tell us what an animal is doing in a given detected
+“behavioral state,” and they can’t tell us if a behavioral state is
+<em>biologically significant.</em> So always <a
+href="https://movementecologyjournal.biomedcentral.com/articles/10.1186/s40462-021-00264-8">use
+caution</a> when using and interpreting hidden Markov models with animal
+movement data.</p>
+<p>On that happy note, thanks for coming!</p>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>## R version 4.2.0 (2022-04-22)
+## Platform: x86_64-apple-darwin17.0 (64-bit)
+## Running under: macOS Big Sur 11.7.6
+## 
+## Matrix products: default
+## LAPACK: /Library/Frameworks/R.framework/Versions/4.2/Resources/lib/libRlapack.dylib
+## 
+## locale:
+## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] doRNG_1.8.2           rngtools_1.5.2        foreach_1.5.2         crawl_2.3.0           lubridate_1.9.2       adehabitatHR_0.4.19   deldir_1.0-6          momentuHMM_1.5.5      ggforce_0.4.1        
+## [10] spatstat_2.3-4        spatstat.linnet_2.3-2 spatstat.core_2.4-4   rpart_4.1.16          nlme_3.1-157          spatstat.random_3.1-3 spatstat.geom_3.0-5   spatstat.data_3.0-0   smacpod_2.5          
+## [19] ape_5.6-2             terra_1.6-41          vembedr_0.1.5         moveVis_0.10.5        move_4.1.8            geosphere_1.5-14      raster_3.6-11         ggplot2_3.4.0         sf_1.0-9             
+## [28] adehabitatLT_0.3.25   CircStats_0.2-6       boot_1.3-28           MASS_7.3-56           adehabitatMA_0.3.14   ade4_1.7-19           rgeos_0.5-9           rgdal_1.6-2           sp_1.6-0             
+## [37] rmarkdown_2.16       
+## 
+## loaded via a namespace (and not attached):
+##  [1] colorspace_2.0-3      class_7.3-20          rstudioapi_0.14       proxy_0.4-27          farver_2.1.1          fansi_1.0.3           mvtnorm_1.1-3         xml2_1.3.3            codetools_0.2-18     
+## [10] splines_4.2.0         doParallel_1.0.17     cachem_1.0.6          knitr_1.39            polyclip_1.10-0       jsonlite_1.8.3        spatstat.sparse_3.0-0 compiler_4.2.0        httr_1.4.4           
+## [19] assertthat_0.2.1      Matrix_1.4-1          fastmap_1.1.0         cli_3.6.0             tweenr_2.0.2          htmltools_0.5.3       tools_4.2.0           gtable_0.3.1          glue_1.6.2           
+## [28] dplyr_1.0.10          smerc_1.7.2           Rcpp_1.0.10           jquerylib_0.1.4       vctrs_0.5.2           av_0.8.3              iterators_1.0.14      lwgeom_0.2-10         xfun_0.35            
+## [37] stringr_1.5.0         timechange_0.2.0      lifecycle_1.0.3       goftest_1.2-3         scales_1.2.1          spatstat.utils_3.0-1  Brobdingnag_1.2-7     slippymath_0.3.1      parallel_4.2.0       
+## [46] yaml_2.3.6            curl_4.3.3            memoise_2.0.1         pbapply_1.6-0         sass_0.4.4            stringi_1.7.12        highr_0.9             plotrix_3.8-2         e1071_1.7-12         
+## [55] gifski_1.6.6-1        rlang_1.0.6           pkgconfig_2.0.3       evaluate_0.15         lattice_0.20-45       tensor_1.5            labeling_0.4.2        cowplot_1.1.1         tidyselect_1.2.0     
+## [64] magrittr_2.0.3        R6_2.5.1              magick_2.7.4          generics_0.1.3        DBI_1.1.3             pillar_1.8.1          withr_2.5.0           mgcv_1.8-40           units_0.8-0          
+## [73] abind_1.4-5           tibble_3.1.8          KernSmooth_2.23-20    utf8_1.2.2            grid_4.2.0            digest_0.6.30         classInt_0.4-8        numDeriv_2016.8-1.1   munsell_0.5.0        
+## [82] bslib_0.4.1</code></pre>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
