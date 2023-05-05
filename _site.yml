@@ -6,6 +6,8 @@ navbar:
       href: index.html
     - text: "Spatial stats tutorial"
       href: Spatial_stats_tutorial.html
+    - text: "HMM tutorial"
+      href: HMM_tutorial.html  
     - text: "Movement video tutorial"
       href: Movement_video_tutorial.html
       
