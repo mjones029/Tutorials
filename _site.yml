@@ -10,5 +10,7 @@ navbar:
       href: HMM_tutorial.html  
     - text: "Movement video tutorial"
       href: Movement_video_tutorial.html
+    - text: "Shapefile buffer tutorial"
+      href: Shapefile_buffer_tutorial.html
       
 output_dir: "docs"

@@ -1,0 +1,184 @@
+---
+title: "Shapefile_buffer_tutorial"
+author: "Marie Gilbertson"
+date: "2023-06-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Preamble
+
+What this code does:
+
+1. Demonstrates making and exporting a shapefil, reading in a shapefile, adding buffers around points in the shapefile, and testing if locations fall within those buffers.
+
+
+
+First things first, let's load the R packages we'll need.
+```{r, results='hide', message=FALSE, warning=FALSE}
+##### Clear Environment #####
+remove(list=ls())
+
+
+#### load libraries ####
+library(sf)
+library(ggplot2)
+library(RColorBrewer)
+```
+
+
+## Simulate data
+
+For simplicity, we're going to simulate some data. In this case, we'll simulate some points on a landscape, starting with coordinates that are given in latitude and longitude. 
+```{r simulate-data}
+set.seed(1566) # set seed for reproducibility
+
+# generate some random data
+data <- data.frame(id = seq(1, 10),
+                   x = runif(10, min = 15, max = 16),
+                   y = runif(10, min = -19, max = -18))
+
+# convert to sf object and plot
+data.sf <- st_as_sf(data, coords = c("x", "y"), crs = 4326) 
+ggplot(data.sf) + geom_sf()
+
+```
+
+Now let's convert these points to UTM coordinates. I randomly generated these points to fall within the country of Namibia, so we'll use the EPSG code for UTM zone 33S. 
+
+```{r transform-coords}
+data.utm <- st_transform(data.sf, crs = 32733)
+head(data.utm) # we can see that our coordinates have been transformed
+
+ggplot(data.utm) + geom_sf()
+
+```
+
+The two plots look the same because ggplot automatically gives latitude and longitude for the axes when plotting sf objects.  
+  
+Now let's save this as a shapefile, which could be opened in other geospatial programs. We could save either the lat/long version or the UTM version, but for now, we'll just save the UTM one.
+
+```{r save-shapefile}
+st_write(data.utm, "UTM_shapefile.shp") # this will save the file into the working directory
+```
+
+
+I'm just showing how to save data so I can also demonstrate how to read in a shapefile in R. By first simulating the data, you can (1) generate the same data used in the rest of the tutorial yourself, and (2) see how to save and read in shapefiles. So, now that we've saved a shapefile, we can read that same shapefile in. 
+```{r read-shapefile}
+shp <- st_read("UTM_shapefile.shp") # the shapefile is in the working directory, so we don't need to provide any additional file path.
+head(shp)
+ggplot(shp) + geom_sf()
+```
+
+Hooray! As you can see, the sf package makes it really easy to read in shapefiles. If you're reading in your own shapefile, you'll want to make sure your sf object has an assigned coordinate reference system (CRS). We can see from the information we got when reading in the shapefile that ours has a Projected CRS for WGS84/UTM zone 33S. If your own file is missing that kind of information, you'll want to set it using the **st_set_crs()** function (here's an [example from Stack Overflow](https://stackoverflow.com/questions/50232331/set-the-right-crs-on-sf-object-to-plot-coordinate-points) for how to do this).
+
+
+## Create buffers around points
+
+Now that we've simulated our data, let's create a buffer around each point. Our buffers will be circles with a 5km radius, centered on each point in our dataset. Because our data is in UTMs, that means that our distance units are in meters. 
+
+```{r create-buffers}
+buff <- st_buffer(shp, dist = 5000) # 5km = 5000m
+head(buff)
+
+## plot buffers with points
+ggplot() + geom_sf(data = buff, fill = "transparent") + 
+  geom_sf(data = shp) + theme_bw()
+
+```
+
+That's looking great! We can also do a quick plot of just the buffer geometry to check our work. In this case, we're doing a "sniff test" to see if it looks like our buffers to, in fact, have a radius of 5km (i.e., a diamter of 10km). Plus, since we know that the area of a circle = pi*r^2, we can use sf to calculate the areas of our buffers, then do a little math to make sure our radii are all 5km (i.e., 5000m).
+
+```{r check-buffers}
+plot(st_geometry(buff), axes = T)
+
+sqrt(st_area(buff)/pi) # these are in meters
+```
+
+There's a little rounding error, but it looks good!
+
+
+## Determine if points are within buffers
+
+Next, we're going to test if a set of data points are within our buffers. It doesn't make sense to do this with the points we first simulated, because those are obviously within our buffers. Instead, we'll simulate some new data. To avoid having to do more coordinate conversions, this time, we'll simulate data in our UTM coordinates from the start. To do so, we'll use a bounding box to keep our simulated data points within the same coordinate range as our buffers.
+
+```{r bbox}
+box <- st_bbox(buff)
+box
+
+```
+
+We'll convert that bounding box into an sfc object so we can then draw a random sample of points from that box.
+```{r box-points}
+
+## convert to sfc object
+box.sfc <- st_as_sfc(box)
+box.sfc
+
+# sample within the bounding box
+sim.data <- st_sample(box.sfc, size = 100)
+head(sim.data)
+
+```
+
+
+Now we'll do a little data wrangling to assign an ID to each our new points.
+```{r data-ids}
+
+sim.data.df <- data.frame(id = seq(1, 100),
+                          x = data.frame(st_coordinates(sim.data))$X, 
+                          y = data.frame(st_coordinates(sim.data))$Y
+)
+head(sim.data.df)
+
+sim.data.sf <- st_as_sf(sim.data.df, coords = c("x", "y"), crs = 32733)
+head(sim.data.sf)
+
+```
+
+Now let's plot our buffers with our new points and see how things are looking.
+```{r plot-buffers-points}
+ggplot() + geom_sf(data = buff, fill = "transparent") + 
+  geom_sf(data = sim.data.sf) + theme_bw()
+
+```
+
+Excellent! Now we can determine which of our simulated points are within our buffers. 
+```{r point-in-buff}
+pts.in <- st_join(x = sim.data.sf, y = buff, join = st_within, left = FALSE)
+pts.in
+```
+
+
+Let's check our work by connecting our "point in buffer" info with the simulated data and buffers. We'll create a new column in the simulated dataset that indicates if a point is or is not in a polygon (by references the pts.in object). We'll then do the same thing with the buffer dataset, but in this case, a column that indicates if a buffer does or does not have points within it. 
+```{r update-datasets}
+sim.data.sf$in.buff <- ifelse(sim.data.sf$id %in% pts.in$id.x, "in", "out")
+head(sim.data.sf)
+
+
+buff$pt.in <- ifelse(buff$id %in% pts.in$id.y, "in", "out")
+head(buff)
+```
+
+
+Now we can check our work by plotting everything together.
+```{r check-pts-in}
+pal <- brewer.pal(n = 5, name = "PRGn")[c(1, 5)] # we'll use RColorBrewer to create a custom color palette. We only need two colors, but I don't like the less vibrant colors in some of the diverging color palettes, so we'll just take the first and last colors in a 5-color diverging palette. 
+ggplot() + 
+  geom_sf(data = buff, aes(colour = pt.in), fill = "transparent") +
+  geom_sf(data = sim.data.sf, aes(colour = in.buff)) +
+  scale_colour_manual(values = pal) +
+  theme_bw() +
+    theme(legend.title = element_blank()) 
+
+```
+
+It worked! We can see that our points are only purple ("in") if they fall within a buffer. In addition, we can see that our buffers are only purple ("in") if a point falls within them. Huzzah!
+
+
+```{r session-info}
+sessionInfo()
+```
